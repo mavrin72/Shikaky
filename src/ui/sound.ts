@@ -1,16 +1,65 @@
 import { settings } from '../core/storage';
 
 let ctx: AudioContext | null = null;
+let unlockBound = false;
+
+/** Scheduling exactly at currentTime lands in the past by the time the audio
+ *  thread picks it up, and the whole envelope is skipped. Always keep a lead. */
+const LEAD = 0.02;
+
+function createContext(): AudioContext | null {
+  if (ctx) return ctx;
+  const Ctor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  ctx = new Ctor();
+  return ctx;
+}
+
+/**
+ * Browsers only let audio start from a real user gesture, and iOS additionally
+ * wants a buffer actually played inside that gesture before it unmutes the
+ * context. So the first tap on the page does both.
+ */
+function unlock(): void {
+  if (!settings().sound) return;
+  const context = createContext();
+  if (!context) return;
+  void context.resume();
+  try {
+    const source = context.createBufferSource();
+    source.buffer = context.createBuffer(1, 1, context.sampleRate);
+    source.connect(context.destination);
+    source.start(0);
+  } catch {
+    /* nothing to unlock on this browser */
+  }
+  if (context.state === 'running') detachUnlock();
+}
+
+function detachUnlock(): void {
+  if (!unlockBound) return;
+  document.removeEventListener('pointerdown', unlock);
+  document.removeEventListener('keydown', unlock);
+  document.removeEventListener('touchend', unlock);
+  unlockBound = false;
+}
+
+export function armAudio(): void {
+  if (unlockBound) return;
+  unlockBound = true;
+  document.addEventListener('pointerdown', unlock);
+  document.addEventListener('keydown', unlock);
+  document.addEventListener('touchend', unlock);
+}
 
 function audio(): AudioContext | null {
   if (!settings().sound) return null;
-  if (!ctx) {
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return null;
-    ctx = new Ctor();
-  }
-  if (ctx.state === 'suspended') void ctx.resume();
-  return ctx;
+  const context = createContext();
+  if (!context) return null;
+  if (context.state !== 'running') void context.resume();
+  return context;
 }
 
 interface ToneOptions {
@@ -25,7 +74,7 @@ interface ToneOptions {
 function tone({ from, to = from, type = 'square', dur = 0.09, gain = 0.09, delay = 0 }: ToneOptions): void {
   const context = audio();
   if (!context) return;
-  const start = context.currentTime + delay;
+  const start = context.currentTime + LEAD + delay;
   const osc = context.createOscillator();
   const amp = context.createGain();
   osc.type = type;
@@ -41,6 +90,11 @@ function tone({ from, to = from, type = 'square', dur = 0.09, gain = 0.09, delay
 
 /** Short synthesised blips — no audio files, nothing to download. */
 export const sfx = {
+  /** Call from inside a user gesture when sound is switched on in settings. */
+  wake: () => {
+    armAudio();
+    unlock();
+  },
   tap: () => tone({ from: 320, type: 'triangle', dur: 0.05, gain: 0.05 }),
   place: () => {
     tone({ from: 180, to: 90, type: 'square', dur: 0.08, gain: 0.08 });

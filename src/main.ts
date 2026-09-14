@@ -5,8 +5,10 @@ import './styles/screens.css';
 import { TOTAL_LEVELS } from './core/levels';
 import { levelsScreen, menuScreen, playScreen } from './ui/screens';
 import { applyTheme } from './ui/modals';
+import { armAudio } from './ui/sound';
 
 applyTheme();
+armAudio();
 
 function route(): void {
   const hash = window.location.hash.replace(/^#\/?/, '');

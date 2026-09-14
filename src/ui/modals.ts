@@ -78,7 +78,11 @@ export function openSettings(onReset: () => void): void {
       h('h2', {}, 'Налаштування'),
       toggleRow('Звук', settings().sound, (next) => {
         updateSettings({ sound: next });
-        if (next) sfx.tap();
+        // This click is a user gesture, so it is the right moment to start audio.
+        if (next) {
+          sfx.wake();
+          sfx.tap();
+        }
       }),
       toggleRow('Ефекти й тряска', settings().fx, (next) => updateSettings({ fx: next })),
       h(
