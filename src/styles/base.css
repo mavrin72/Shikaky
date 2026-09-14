@@ -1,0 +1,177 @@
+/* ---------------------------------------------------------------
+   Shikaky — neo-brutal arcade
+   Hard edges, no blur, colour blocks that carry meaning.
+   Every surface: 3px frame + offset shadow, never a soft one.
+---------------------------------------------------------------- */
+:root {
+  --ink: #111111;
+  --ink-soft: #55534A;
+  --bg: #FFF4D6;
+  --surface: #FFFFFF;
+  --cell: #FFFDF3;
+  --frame: #111111;
+  --shadow: #111111;
+  --grid-line: rgba(17, 17, 17, 0.14);
+
+  --yellow: #FFE14A;
+  --pink: #FF4D8D;
+  --blue: #2D5BFF;
+  --green: #00D18F;
+  --orange: #FF7A2F;
+  --violet: #9B5DE5;
+  --danger: #FF2E2E;
+
+  --on-yellow: #111111;
+  --on-pink: #170008;
+  --on-blue: #F2F5FF;
+  --on-green: #00281C;
+  --on-orange: #240F00;
+  --on-violet: #F6EEFF;
+
+  --bw: 3px;
+  --r: 4px;
+  --lift: 5px;
+
+  --f-display: 'Unbounded', 'Trebuchet MS', system-ui, sans-serif;
+  --f-ui: 'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --dur-fast: 110ms;
+  --dur: 220ms;
+  --ease-slam: cubic-bezier(0.2, 1.5, 0.35, 1);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink: #F5F2E8;
+    --ink-soft: #A7A49A;
+    --bg: #15161A;
+    --surface: #23252E;
+    --cell: #2B2E38;
+    --frame: #F5F2E8;
+    --shadow: #000000;
+    --grid-line: rgba(245, 242, 232, 0.16);
+    --yellow: #FFD93B;
+    --on-blue: #FFFFFF;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ink: #F5F2E8;
+  --ink-soft: #A7A49A;
+  --bg: #15161A;
+  --surface: #23252E;
+  --cell: #2B2E38;
+  --frame: #F5F2E8;
+  --shadow: #000000;
+  --grid-line: rgba(245, 242, 232, 0.16);
+  --yellow: #FFD93B;
+  --on-blue: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-ui);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Faint grid on the page ground — the game is about cutting a grid, so the
+   whole app sits on one. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.5;
+}
+
+#app { position: relative; z-index: 1; min-height: 100%; }
+
+h1, h2, h3 { font-family: var(--f-display); font-weight: 800; margin: 0; letter-spacing: -0.02em; }
+
+button { font: inherit; color: inherit; }
+
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---------- the one button in the system ---------- */
+.btn {
+  --btn-bg: var(--surface);
+  --btn-ink: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  background: var(--btn-bg);
+  color: var(--btn-ink);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  box-shadow: var(--lift) var(--lift) 0 var(--shadow);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.btn:hover { transform: translate(-1px, -1px); box-shadow: calc(var(--lift) + 1px) calc(var(--lift) + 1px) 0 var(--shadow); }
+.btn:active { transform: translate(var(--lift), var(--lift)); box-shadow: 0 0 0 var(--shadow); }
+.btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+.btn--primary { --btn-bg: var(--yellow); --btn-ink: var(--on-yellow); font-family: var(--f-display); font-weight: 800; }
+.btn--pink { --btn-bg: var(--pink); --btn-ink: var(--on-pink); }
+.btn--blue { --btn-bg: var(--blue); --btn-ink: var(--on-blue); }
+.btn--green { --btn-bg: var(--green); --btn-ink: var(--on-green); }
+.btn--big { padding: 18px 26px; font-size: 20px; }
+.btn--icon { padding: 10px; min-width: 46px; }
+.btn--ghost { box-shadow: none; background: transparent; }
+.btn--ghost:hover { box-shadow: none; transform: none; background: var(--surface); }
+
+/* ---------- surfaces ---------- */
+.panel {
+  background: var(--surface);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  box-shadow: var(--lift) var(--lift) 0 var(--shadow);
+}
+
+.tag {
+  display: inline-block;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border: 2px solid var(--frame);
+  border-radius: 3px;
+  background: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

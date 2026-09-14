@@ -1,0 +1,380 @@
+import { formatTime, Game } from '../core/game';
+import {
+  dailyKey,
+  dailyPuzzle,
+  firstLevelOfTier,
+  levelRef,
+  puzzleForLevel,
+  TIERS,
+  TOTAL_LEVELS,
+  type Tier,
+} from '../core/levels';
+import {
+  dailyRecord,
+  isSolved,
+  isUnlocked,
+  nextLevel,
+  recordDaily,
+  recordOf,
+  recordWin,
+  resetProgress,
+  solvedCount,
+} from '../core/storage';
+import { BoardView } from './board';
+import { h } from './dom';
+import { confetti, toast } from './fx';
+import { openRules, openSettings, openSheet } from './modals';
+import { sfx } from './sound';
+
+const ON_TIER: Record<string, string> = {
+  '--green': '#00281C',
+  '--blue': '#F2F5FF',
+  '--pink': '#170008',
+  '--orange': '#240F00',
+  '--violet': '#F6EEFF',
+};
+
+const go = (hash: string): void => {
+  window.location.hash = hash;
+};
+
+let cleanup: (() => void) | null = null;
+
+export function mount(screen: HTMLElement, dispose?: () => void): void {
+  cleanup?.();
+  cleanup = dispose ?? null;
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.replaceChildren(screen);
+  window.scrollTo(0, 0);
+}
+
+function topbar(title: string, subtitle?: string, back?: string): HTMLElement {
+  return h(
+    'div',
+    { class: 'topbar' },
+    back
+      ? h(
+          'button',
+          { class: 'btn btn--icon', type: 'button', 'aria-label': 'Назад', onclick: () => go(back) },
+          '←',
+        )
+      : null,
+    h(
+      'div',
+      { class: 'topbar__title' },
+      title,
+      subtitle ? h('span', { class: 'topbar__sub' }, ` ${subtitle}`) : null,
+    ),
+    h(
+      'button',
+      {
+        class: 'btn btn--icon',
+        type: 'button',
+        'aria-label': 'Правила',
+        onclick: () => openRules(),
+      },
+      '?',
+    ),
+    h(
+      'button',
+      {
+        class: 'btn btn--icon',
+        type: 'button',
+        'aria-label': 'Налаштування',
+        onclick: () =>
+          openSettings(() => {
+            resetProgress();
+            toast('Прогрес стерто');
+            go('#/');
+          }),
+      },
+      '⚙',
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ menu
+export function menuScreen(): void {
+  const done = solvedCount();
+  const next = nextLevel();
+  const { tier } = levelRef(next);
+
+  mount(
+    h(
+      'div',
+      { class: 'screen' },
+      topbar('Shikaky'),
+      h(
+        'div',
+        { class: 'hero' },
+        h('span', { class: 'hero__jp' }, '四角に切れ'),
+        h('h1', {}, 'Shikaky'),
+        h('p', {}, 'Розріж поле на прямокутники. У кожному — рівно одне число, і воно дорівнює площі. 160 рівнів, жодного однакового.'),
+      ),
+      h(
+        'div',
+        { class: 'menu-grid' },
+        h(
+          'button',
+          { class: 'btn btn--primary btn--big', type: 'button', onclick: () => go(`#/play/${next}`) },
+          done ? `Далі: рівень ${next}` : 'Почати гру',
+        ),
+        h('button', { class: 'btn btn--blue btn--big', type: 'button', onclick: () => go('#/levels') }, 'Рівні'),
+        h('button', { class: 'btn btn--green btn--big', type: 'button', onclick: () => go('#/daily') }, 'Щоденна'),
+        h('button', { class: 'btn btn--big', type: 'button', onclick: () => openRules() }, 'Як грати'),
+      ),
+      h(
+        'div',
+        { class: 'stat-row' },
+        h('div', { class: 'stat' }, h('b', {}, `${done}/${TOTAL_LEVELS}`), h('span', {}, 'пройдено')),
+        h('div', { class: 'stat' }, h('b', {}, tier.name), h('span', {}, 'поточний блок')),
+        h(
+          'div',
+          { class: 'stat' },
+          h('b', {}, dailyRecord(dailyKey()) ? formatTime(dailyRecord(dailyKey()) as number) : '—'),
+          h('span', {}, 'щоденна сьогодні'),
+        ),
+      ),
+    ),
+  );
+}
+
+// ------------------------------------------------------------ level select
+function tierBlock(tier: Tier): HTMLElement {
+  const start = firstLevelOfTier(tier.id);
+  const levels = Array.from({ length: tier.count }, (_, i) => start + i);
+  const done = levels.filter(isSolved).length;
+  const next = nextLevel();
+
+  const grid = h('div', { class: 'levels' });
+  for (const level of levels) {
+    const record = recordOf(level);
+    const unlocked = isUnlocked(level);
+    const classes = ['lvl'];
+    if (record) classes.push('lvl--done');
+    else if (!unlocked) classes.push('lvl--locked');
+    if (level === next) classes.push('lvl--next');
+
+    grid.append(
+      h(
+        'button',
+        {
+          class: classes.join(' '),
+          type: 'button',
+          disabled: !unlocked,
+          'aria-label': `Рівень ${level}${record ? `, пройдено за ${formatTime(record.time)}` : ''}`,
+          onclick: () => unlocked && go(`#/play/${level}`),
+        },
+        h('span', {}, String(level)),
+        record ? h('small', {}, formatTime(record.time)) : !unlocked ? h('small', {}, '🔒') : null,
+      ),
+    );
+  }
+
+  const block = h(
+    'section',
+    { class: 'tier' },
+    h(
+      'div',
+      { class: 'tier__head' },
+      h('span', { class: 'tier__name' }, tier.name),
+      h('span', { class: 'tier__meta' }, `${tier.rows}×${tier.cols} · ${tier.hint} · ${done}/${tier.count}`),
+    ),
+    h('div', { class: 'tier__bar' }, h('i', { style: { width: `${(done / tier.count) * 100}%` } })),
+    grid,
+  );
+  block.style.setProperty('--tier-ink', `var(${tier.ink})`);
+  block.style.setProperty('--on-tier', ON_TIER[tier.ink] ?? '#111111');
+  return block;
+}
+
+export function levelsScreen(): void {
+  mount(
+    h(
+      'div',
+      { class: 'screen' },
+      topbar('Рівні', `${solvedCount()}/${TOTAL_LEVELS}`, '#/'),
+      ...TIERS.map(tierBlock),
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ play
+export function playScreen(target: number | 'daily'): void {
+  const isDaily = target === 'daily';
+  const level = isDaily ? 0 : (target as number);
+  const puzzle = isDaily ? dailyPuzzle() : puzzleForLevel(level);
+  const ref = isDaily ? null : levelRef(level);
+  const game = new Game(puzzle);
+  const hintBudget = 3;
+
+  const timerEl = h('div', { class: 'hud__timer' }, '00:00');
+  const noteEl = h('p', { class: 'progress-note' });
+  const undoBtn = h('button', { class: 'btn', type: 'button' }, '↶ Крок назад');
+  const redoBtn = h('button', { class: 'btn', type: 'button' }, '↷ Вперед');
+  const hintBtn = h('button', { class: 'btn btn--blue', type: 'button' }, `Підказка ${hintBudget}`);
+  const clearBtn = h('button', { class: 'btn btn--pink', type: 'button' }, 'Очистити');
+
+  let elapsed = 0;
+  let lastTick = performance.now();
+  let running = true;
+  let finished = false;
+
+  const board = new BoardView({
+    game,
+    onChange: () => syncHud(),
+    onSolve: () => finish(),
+  });
+
+  function syncHud(): void {
+    const cells = puzzle.rows * puzzle.cols;
+    noteEl.textContent = `Закрито ${game.coveredCells()} з ${cells} клітинок · чисел готово ${game.solvedClues} з ${puzzle.clues.length}`;
+    undoBtn.toggleAttribute('disabled', !game.canUndo);
+    redoBtn.toggleAttribute('disabled', !game.canRedo);
+    hintBtn.toggleAttribute('disabled', game.hintsUsed >= hintBudget);
+    hintBtn.textContent = `Підказка ${Math.max(hintBudget - game.hintsUsed, 0)}`;
+  }
+
+  const tick = window.setInterval(() => {
+    const now = performance.now();
+    if (running && !document.hidden) elapsed += now - lastTick;
+    lastTick = now;
+    timerEl.textContent = formatTime(elapsed);
+  }, 250);
+
+  function finish(): void {
+    if (finished) return;
+    finished = true;
+    running = false;
+    board.celebrate();
+    sfx.win();
+    confetti(board.center());
+
+    let headline = 'Розрізано!';
+    let sub = '';
+    if (isDaily) {
+      const key = dailyKey();
+      const previous = dailyRecord(key);
+      recordDaily(key, elapsed);
+      sub = previous ? `Твій попередній результат: ${formatTime(previous)}` : 'Перша щоденна сьогодні — закрита.';
+    } else {
+      const previous = recordOf(level);
+      const { best } = recordWin(level, elapsed, game.hintsUsed);
+      if (best && previous) headline = 'Новий рекорд!';
+      sub = previous ? `Було: ${formatTime(previous.time)}` : `Блок «${ref?.tier.name}», рівень ${ref?.nth} з ${ref?.tier.count}`;
+    }
+
+    const following = isDaily ? null : Math.min(level + 1, TOTAL_LEVELS);
+    window.setTimeout(() => {
+      openSheet((close) =>
+        h(
+          'div',
+          { class: 'sheet' },
+          h('h2', {}, headline),
+          h(
+            'div',
+            { class: 'result' },
+            h('div', {}, h('b', {}, formatTime(elapsed)), h('span', {}, 'час')),
+            h('div', {}, h('b', {}, String(game.moves)), h('span', {}, 'ходів')),
+            h('div', {}, h('b', {}, String(game.hintsUsed)), h('span', {}, 'підказок')),
+          ),
+          h('p', {}, sub),
+          h(
+            'div',
+            { class: 'sheet__row' },
+            following && following !== level
+              ? h(
+                  'button',
+                  {
+                    class: 'btn btn--primary',
+                    type: 'button',
+                    onclick: () => {
+                      close();
+                      go(`#/play/${following}`);
+                    },
+                  },
+                  'Далі →',
+                )
+              : null,
+            h(
+              'button',
+              {
+                class: 'btn',
+                type: 'button',
+                onclick: () => {
+                  close();
+                  playScreen(target);
+                },
+              },
+              'Ще раз',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn',
+                type: 'button',
+                onclick: () => {
+                  close();
+                  go(isDaily ? '#/' : '#/levels');
+                },
+              },
+              isDaily ? 'У меню' : 'До рівнів',
+            ),
+          ),
+        ),
+      );
+    }, 700);
+  }
+
+  undoBtn.addEventListener('click', () => {
+    if (game.undo()) {
+      sfx.erase();
+      board.refresh();
+    }
+  });
+  redoBtn.addEventListener('click', () => {
+    if (game.redo()) {
+      sfx.tap();
+      board.refresh();
+    }
+  });
+  hintBtn.addEventListener('click', () => {
+    const result = game.hint();
+    if (!result) {
+      toast('Усе вже на місці');
+      return;
+    }
+    sfx.hint();
+    board.refresh();
+  });
+  clearBtn.addEventListener('click', () => {
+    game.clear();
+    sfx.erase();
+    board.refresh();
+  });
+
+  const title = isDaily ? 'Щоденна' : `Рівень ${level}`;
+  const subtitle = isDaily ? dailyKey() : `${ref?.tier.name} · ${puzzle.rows}×${puzzle.cols}`;
+
+  const screen = h(
+    'div',
+    { class: 'screen play' },
+    topbar('Shikaky', undefined, isDaily ? '#/' : '#/levels'),
+    h(
+      'div',
+      { class: 'hud' },
+      h('div', { class: 'hud__level' }, title, h('span', { class: 'hud__tier' }, subtitle)),
+      timerEl,
+    ),
+    board.el,
+    h('div', { class: 'tools' }, undoBtn, redoBtn, hintBtn, clearBtn),
+    noteEl,
+  );
+
+  mount(screen, () => {
+    window.clearInterval(tick);
+    board.destroy();
+  });
+  syncHud();
+}

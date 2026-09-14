@@ -1,0 +1,154 @@
+/* ---------------------------------------------------------------
+   The board: three stacked grids — cells, pieces, numbers.
+   Pieces slam in; wrong ones get hatched and shake.
+---------------------------------------------------------------- */
+.board {
+  --gap: 5px;
+  width: min(92vw, 34rem, calc((100svh - 19rem) * var(--ar)));
+  padding: var(--gap);
+  background: var(--surface);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  box-shadow: 7px 7px 0 var(--shadow);
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+.board:focus-visible { outline: 3px solid var(--pink); outline-offset: 5px; }
+
+/* The stage carries the aspect ratio so padding and border never squash the grid. */
+.board__stage {
+  position: relative;
+  aspect-ratio: var(--cols) / var(--rows);
+}
+
+.board__layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  gap: var(--gap);
+}
+.board__layer--cells { z-index: 1; }
+.board__layer--pieces { z-index: 2; pointer-events: none; }
+.board__layer--clues { z-index: 3; pointer-events: none; }
+.board__layer--overlay { z-index: 4; pointer-events: none; }
+
+.cell {
+  background: var(--cell);
+  border: 2px solid var(--frame);
+  border-radius: 3px;
+}
+
+.piece {
+  position: relative;
+  background: var(--fill);
+  border: var(--bw) solid var(--frame);
+  border-radius: 3px;
+  box-shadow: 4px 4px 0 var(--shadow);
+  animation: piece-slam 380ms var(--ease-slam) both;
+}
+@keyframes piece-slam {
+  0%   { transform: translate(-8px, -13px) rotate(-2.2deg); box-shadow: 12px 16px 0 rgba(0, 0, 0, 0.3); }
+  65%  { transform: translate(1px, 2px) rotate(0.7deg); }
+  100% { transform: translate(0, 0) rotate(0); box-shadow: 4px 4px 0 var(--shadow); }
+}
+
+.piece--bad {
+  background:
+    repeating-linear-gradient(-45deg, var(--danger) 0 9px, #ffffff 9px 18px);
+  animation: piece-wrong 320ms var(--ease-out) both;
+}
+@keyframes piece-wrong {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  45% { transform: translateX(5px); }
+  70% { transform: translateX(-3px); }
+}
+
+.piece--leaving { animation: piece-pop 150ms var(--ease-out) forwards; }
+@keyframes piece-pop {
+  to { transform: scale(0.8) rotate(-3deg); opacity: 0; }
+}
+
+.clue {
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(11px, calc(var(--cell-size) * 0.46), 26px);
+  color: var(--ink);
+  line-height: 1;
+}
+.clue span {
+  display: grid;
+  place-items: center;
+  min-width: 1.45em;
+  min-height: 1.45em;
+  border-radius: 3px;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+}
+.clue--done span {
+  background: var(--frame);
+  color: var(--surface);
+  animation: clue-pop 320ms var(--ease-slam);
+}
+@keyframes clue-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.3) rotate(-6deg); }
+  100% { transform: scale(1); }
+}
+
+.preview {
+  border: var(--bw) dashed var(--frame);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--yellow) 55%, transparent);
+}
+.preview--bad { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 28%, transparent); }
+.preview__size {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--frame);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+.kcursor {
+  border: var(--bw) solid var(--pink);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--surface) inset;
+  animation: kcursor 1s steps(2) infinite;
+}
+@keyframes kcursor { 50% { opacity: 0.35; } }
+
+.board--solved .piece { animation: piece-wave 620ms var(--ease-slam) both; animation-delay: var(--d, 0ms); }
+@keyframes piece-wave {
+  0% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(0, -10px) scale(1.04) rotate(-1.5deg); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.board--shake { animation: board-shake 260ms var(--ease-out); }
+@keyframes board-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-5px, 2px); }
+  60% { transform: translate(4px, -2px); }
+}
+
+#fx {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* A number sitting on a coloured piece always stays black — the tints are light
+   on purpose so this reads in both themes. */
+.clue--covered:not(.clue--done) span { color: #111111; }

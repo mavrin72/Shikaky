@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Shikaky">
+  <rect width="512" height="512" fill="#FFE14A"/>
+  <g stroke="#111" stroke-width="16">
+    <rect x="56" y="56" width="176" height="256" fill="#FF8FB8"/>
+    <rect x="248" y="56" width="208" height="112" fill="#8FA9FF"/>
+    <rect x="248" y="184" width="208" height="128" fill="#5FE3BE"/>
+    <rect x="56" y="328" width="400" height="128" fill="#FFB07A"/>
+  </g>
+  <g fill="#111" font-family="Rubik, Arial Black, sans-serif" font-weight="900" font-size="96" text-anchor="middle">
+    <text x="144" y="215">6</text>
+    <text x="352" y="145">4</text>
+    <text x="352" y="280">6</text>
+    <text x="256" y="425">8</text>
+  </g>
+</svg>
