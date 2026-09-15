@@ -223,7 +223,42 @@
   .screen { padding-inline: 14px; }
 }
 
-/* ---------- basket (merge game) ---------- */
+/* ---------- pond (merge game) ---------- */
+.pond {
+  position: relative;
+  width: min(92vw, 22rem);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  box-shadow: 7px 7px 0 var(--shadow);
+  overflow: hidden;
+  line-height: 0;
+  background: #DFF2E6;
+}
+.pond canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: pointer; }
+.pond__popup {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: var(--f-ui);
+  font-weight: 900;
+  font-size: 20px;
+  color: #1A1410;
+  text-shadow: 0 2px 0 #FFFDF6, 0 -2px 0 #FFFDF6, 2px 0 0 #FFFDF6, -2px 0 0 #FFFDF6;
+  white-space: nowrap;
+  z-index: 3;
+}
+.pond__popup b {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  background: var(--pink);
+  color: #fff;
+  border: 2px solid var(--frame);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-shadow: none;
+}
+
 .basket {
   width: min(92vw, 22rem);
   border: var(--bw) solid var(--frame);
