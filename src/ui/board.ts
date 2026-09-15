@@ -68,7 +68,9 @@ export class BoardView {
     this.el.style.setProperty('--cols', String(cols));
     this.el.style.setProperty('--rows', String(rows));
     this.el.style.setProperty('--ar', String(cols / rows));
-    this.el.style.setProperty('--gap', cols >= 10 ? '3px' : '5px');
+    this.el.style.setProperty('--gap', cols >= 13 ? '2px' : cols >= 10 ? '3px' : '5px');
+    // Big boards need thinner ink, otherwise the borders eat the cells.
+    if (cols >= 13) this.el.classList.add('board--dense');
     const stage = h('div', { class: 'board__stage' }, this.cellsLayer, this.piecesLayer, this.cluesLayer, this.overlay);
     this.el.append(stage);
 

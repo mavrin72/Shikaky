@@ -16,12 +16,18 @@ export interface Tier {
 }
 
 export const TIERS: Tier[] = [
-  { id: 1, name: 'Розминка', hint: 'Вчимося різати', rows: 5, cols: 5, maxArea: 6, count: 30, guessBand: [0, 0], ink: '--green' },
-  { id: 2, name: 'Ритм', hint: 'Без здогадок', rows: 7, cols: 7, maxArea: 8, count: 35, guessBand: [0, 1], ink: '--blue' },
-  { id: 3, name: 'Тиск', hint: 'Треба думати', rows: 9, cols: 9, maxArea: 9, count: 35, guessBand: [1, 4], ink: '--pink' },
-  { id: 4, name: 'Вузол', hint: 'Тримайся', rows: 10, cols: 10, maxArea: 12, count: 30, guessBand: [2, 8], ink: '--orange' },
-  { id: 5, name: 'Хаос', hint: 'Без жалю', rows: 12, cols: 12, maxArea: 14, count: 30, guessBand: [3, 24], ink: '--violet' },
+  { id: 1, name: 'Розминка', hint: 'Вчимося різати', rows: 5, cols: 5, maxArea: 6, count: 40, guessBand: [0, 0], ink: '--green' },
+  { id: 2, name: 'Ритм', hint: 'Без здогадок', rows: 7, cols: 7, maxArea: 8, count: 50, guessBand: [0, 1], ink: '--blue' },
+  { id: 3, name: 'Тиск', hint: 'Треба думати', rows: 9, cols: 9, maxArea: 9, count: 50, guessBand: [1, 4], ink: '--pink' },
+  { id: 4, name: 'Вузол', hint: 'Тримайся', rows: 10, cols: 10, maxArea: 12, count: 50, guessBand: [2, 8], ink: '--orange' },
+  { id: 5, name: 'Хаос', hint: 'Без жалю', rows: 12, cols: 12, maxArea: 14, count: 50, guessBand: [3, 24], ink: '--violet' },
+  { id: 6, name: 'Лабіринт', hint: 'Довга гра', rows: 13, cols: 13, maxArea: 16, count: 40, guessBand: [4, 30], ink: '--cyan' },
+  { id: 7, name: 'Безодня', hint: 'Для впертих', rows: 15, cols: 15, maxArea: 18, count: 40, guessBand: [6, 50], ink: '--red' },
 ];
+
+/** Tier sizes as they shipped in v1 — kept so saved progress can be moved onto the
+ *  stable tier/number keys instead of silently pointing at different puzzles. */
+export const LEGACY_V1_COUNTS = [30, 35, 35, 30, 30];
 
 export const TOTAL_LEVELS = TIERS.reduce((sum, tier) => sum + tier.count, 0);
 

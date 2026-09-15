@@ -41,6 +41,10 @@
   border-radius: 3px;
 }
 
+.board--dense .cell { border-width: 1.5px; border-radius: 2px; }
+.board--dense .piece { border-width: 2px; box-shadow: 3px 3px 0 var(--shadow); }
+.board--dense .clue { font-size: clamp(9px, calc(var(--cell-size) * 0.52), 20px); }
+
 .piece {
   position: relative;
   background: var(--fill);

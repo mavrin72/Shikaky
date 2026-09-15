@@ -32,6 +32,8 @@ const ON_TIER: Record<string, string> = {
   '--pink': '#170008',
   '--orange': '#240F00',
   '--violet': '#F6EEFF',
+  '--cyan': '#00252B',
+  '--red': '#FFF0EE',
 };
 
 const go = (hash: string): void => {
@@ -110,7 +112,7 @@ export function menuScreen(): void {
         { class: 'hero' },
         h('span', { class: 'hero__jp' }, '四角に切れ'),
         h('h1', {}, 'Shikaky'),
-        h('p', {}, 'Розріж поле на прямокутники. У кожному — рівно одне число, і воно дорівнює площі. 160 рівнів, жодного однакового.'),
+        h('p', {}, `Розріж поле на прямокутники. У кожному — рівно одне число, і воно дорівнює площі. ${TOTAL_LEVELS} рівнів, жодного однакового.`),
       ),
       h(
         'div',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generatePuzzle } from '../src/core/generator';
 import { dailyPuzzle, puzzleForLevel, TIERS, TOTAL_LEVELS, levelRef } from '../src/core/levels';
 import { candidatesFor, solve } from '../src/core/solver';
+import { migrateV1 } from '../src/core/storage';
 import { area, contains, overlaps } from '../src/core/types';
 import type { Puzzle } from '../src/core/types';
 
@@ -90,6 +91,19 @@ describe('generator', () => {
         expect(overlaps(puzzle.solution[i], puzzle.solution[j])).toBe(false);
       }
     }
+  });
+});
+
+describe('saved progress', () => {
+  it('moves v1 global level numbers onto tier keys', () => {
+    const migrated = migrateV1({
+      '1': { time: 1000, hints: 0 },
+      '31': { time: 2000, hints: 1 },
+      '160': { time: 3000, hints: 3 },
+    });
+    // v1 tiers were 30 / 35 / 35 / 30 / 30 levels long.
+    expect(Object.keys(migrated).sort()).toEqual(['t1.1', 't2.1', 't5.30']);
+    expect(migrated['t5.30'].time).toBe(3000);
   });
 });
 

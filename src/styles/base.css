@@ -19,6 +19,8 @@
   --green: #00D18F;
   --orange: #FF7A2F;
   --violet: #9B5DE5;
+  --cyan: #22C9E0;
+  --red: #FF3B2F;
   --danger: #FF2E2E;
 
   --on-yellow: #111111;
@@ -27,6 +29,8 @@
   --on-green: #00281C;
   --on-orange: #240F00;
   --on-violet: #F6EEFF;
+  --on-cyan: #00252B;
+  --on-red: #FFF0EE;
 
   --bw: 3px;
   --r: 4px;
