@@ -416,6 +416,7 @@ function basketRules(): void {
 export function basketScreen(): void {
   const scoreEl = h('div', { class: 'hud__level' }, '₴0', h('span', { class: 'hud__tier' }, 'кошик'));
   const bestEl = h('div', { class: 'hud__timer' }, `рекорд ₴${basketBest()}`);
+  const comboEl = h('div', { class: 'combo' }, h('b', {}, '×2'), h('i', {}));
   const nextEl = h('div', { class: 'nextup' });
   const chain = h('div', { class: 'chain' });
 
@@ -432,18 +433,26 @@ export function basketScreen(): void {
     return dot;
   });
 
-  function showNext(tier: number): void {
-    const item = CHAIN[tier];
+  const bead = (tier: number, size: number): HTMLElement => {
+    const dot = h('i', { class: 'nextup__dot' });
+    dot.style.background = CHAIN[tier].fill;
+    dot.style.width = `${size}px`;
+    dot.style.height = `${size}px`;
+    return dot;
+  };
+
+  function showNext(tier: number, after: number): void {
     nextEl.replaceChildren(
       h('span', { class: 'nextup__label' }, 'далі'),
-      (() => {
-        const dot = h('i', { class: 'nextup__dot' });
-        dot.style.background = item.fill;
-        return dot;
-      })(),
-      h('span', { class: 'nextup__name' }, item.short),
+      bead(tier, 20),
+      h('span', { class: 'nextup__name' }, CHAIN[tier].short),
+      h('span', { class: 'nextup__then' }, 'потім'),
+      bead(after, 13),
     );
   }
+
+  const shakeBtn = h('button', { class: 'btn btn--blue', type: 'button' }, 'Струсити 3');
+  const again = h('button', { class: 'btn btn--pink', type: 'button' }, 'Заново');
 
   const view = createBasketView({
     onScore: (score, best) => {
@@ -454,6 +463,20 @@ export function basketScreen(): void {
     onReach: (tier) => {
       recordBasket(0, tier);
       nodes.forEach((dot, i) => dot.classList.toggle('chain__dot--got', i <= Math.max(tier, basketTop())));
+      nodes[tier]?.classList.remove('chain__dot--new');
+      void nodes[tier]?.offsetWidth;
+      nodes[tier]?.classList.add('chain__dot--new');
+    },
+    onCombo: (combo, left) => {
+      comboEl.classList.toggle('combo--on', combo > 1);
+      if (combo > 1) {
+        comboEl.firstChild!.textContent = `×${combo}`;
+        (comboEl.lastChild as HTMLElement).style.width = `${Math.min(100, (left / 1.5) * 100)}%`;
+      }
+    },
+    onShakes: (left) => {
+      shakeBtn.textContent = `Струсити ${left}`;
+      shakeBtn.toggleAttribute('disabled', left <= 0);
     },
     onOver: (score, best) => {
       openSheet((close) =>
@@ -468,7 +491,7 @@ export function basketScreen(): void {
             h('div', {}, h('b', {}, `₴${best}`), h('span', {}, 'рекорд')),
             h('div', {}, h('b', {}, CHAIN[Math.max(basketTop(), 0)].short), h('span', {}, 'найбільше')),
           ),
-          h('p', {}, 'Стос переріс червону лінію. Найбільший продукт злиття лишається в колекції.'),
+          h('p', {}, 'Стос переріс червону лінію. Найбільший продукт лишається в колекції внизу.'),
           h(
             'div',
             { class: 'sheet__row' },
@@ -502,31 +525,25 @@ export function basketScreen(): void {
     },
   });
 
-  const again = h(
-    'button',
-    {
-      class: 'btn btn--pink',
-      type: 'button',
-      onclick: () => {
-        view.restart();
-        toast('Нова спроба');
-      },
-    },
-    'Заново',
-  );
+  shakeBtn.addEventListener('click', () => view.shake());
+  again.addEventListener('click', () => {
+    view.restart();
+    toast('Нова спроба');
+  });
 
   mount(
     h(
       'div',
       { class: 'screen play' },
       topbar('Shikaky', undefined, '#/', basketRules),
-      h('div', { class: 'hud' }, scoreEl, bestEl),
+      h('div', { class: 'hud' }, scoreEl, comboEl, bestEl),
       view.el,
-      h('div', { class: 'tools' }, nextEl, again),
+      h('div', { class: 'tools' }, nextEl),
+      h('div', { class: 'tools' }, shakeBtn, again),
       h('div', { class: 'chain-wrap' }, chain),
-      h('p', { class: 'progress-note' }, 'Тягни, щоб прицілитись, відпусти — впаде. Дві однакові зливаються в наступний продукт. Не дай стосу перерости червону лінію.'),
+      h('p', { class: 'progress-note' }, 'Тягни, щоб прицілитись, відпусти — впаде. Дві однакові зливаються. Злиття поспіль дають комбо-множник.'),
     ),
     () => view.destroy(),
   );
-  showNext(view.game.next);
+  showNext(view.game.next, view.game.queued);
 }

@@ -237,6 +237,7 @@
 .basket__canvas:focus-visible { outline: 3px solid var(--pink); outline-offset: -3px; }
 
 .nextup {
+  flex: 1 1 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -266,3 +267,36 @@
   transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-slam);
 }
 .chain__dot--got { opacity: 1; transform: scale(1.05); }
+
+.combo {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  background: var(--pink);
+  color: var(--on-pink);
+  font-weight: 900;
+  box-shadow: 3px 3px 0 var(--shadow);
+  animation: combo-in 220ms var(--ease-slam);
+}
+.combo--on { display: flex; }
+.combo b { font-family: var(--f-display); font-size: 15px; }
+.combo i { display: block; width: 100%; height: 5px; background: var(--on-pink); border-radius: 2px; min-width: 22px; }
+@keyframes combo-in { from { transform: scale(0.7) rotate(-6deg); } }
+
+.nextup__then {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-left: 4px;
+}
+.chain__dot--new { animation: chain-pop 420ms var(--ease-slam); }
+@keyframes chain-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.7) rotate(-10deg); }
+  100% { transform: scale(1.05); }
+}

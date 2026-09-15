@@ -53,8 +53,9 @@ export interface Body {
 }
 
 export type BasketEvent =
-  | { type: 'merge'; tier: number; x: number; y: number; id: number }
+  | { type: 'merge'; tier: number; x: number; y: number; id: number; combo: number; gain: number }
   | { type: 'drop' }
+  | { type: 'shake' }
   | { type: 'final'; x: number; y: number }
   | { type: 'over' };
 
@@ -76,6 +77,12 @@ const SUBSTEPS = 4;
 const DROP_COOLDOWN = 0.32;
 /** How long a body may sit above the line before the run ends. */
 const OVER_GRACE = 1.1;
+/** Merges landing inside this window keep the combo alive. */
+const COMBO_WINDOW = 1.4;
+/** Cascades can chain a long way; past this the multiplier stops being a reward
+ *  and just inflates the receipt. */
+const COMBO_CAP = 8;
+const SHAKES_PER_RUN = 3;
 
 export class Basket {
   readonly width = 360;
@@ -90,6 +97,10 @@ export class Basket {
   over = false;
   next = 0;
   queued = 0;
+  /** Merges chained back to back. Every merge in a chain is worth that much more. */
+  combo = 0;
+  comboLeft = 0;
+  shakesLeft = SHAKES_PER_RUN;
 
   private rng: Rng;
   private nextId = 1;
@@ -111,6 +122,9 @@ export class Basket {
     this.merges = 0;
     this.over = false;
     this.cooldown = 0;
+    this.combo = 0;
+    this.comboLeft = 0;
+    this.shakesLeft = SHAKES_PER_RUN;
     this.next = this.pick();
     this.queued = this.pick();
   }
@@ -155,9 +169,24 @@ export class Basket {
     return true;
   }
 
+  /** Shakes the whole basket to unstick a bad pile — three per run. */
+  shake(): boolean {
+    if (this.over || this.shakesLeft <= 0) return false;
+    this.shakesLeft--;
+    for (const body of this.bodies) {
+      body.vx += (this.rng() - 0.5) * 520;
+      body.vy -= 60 + this.rng() * 190;
+      body.spin += (this.rng() - 0.5) * 3;
+    }
+    this.events.push({ type: 'shake' });
+    return true;
+  }
+
   step(dt: number): void {
     if (this.over) return;
     this.cooldown = Math.max(0, this.cooldown - dt);
+    this.comboLeft = Math.max(0, this.comboLeft - dt);
+    if (this.comboLeft === 0) this.combo = 0;
     for (const body of this.bodies) {
       body.age += dt;
       body.fresh = false;
@@ -306,7 +335,10 @@ export class Basket {
     const x = (a.x + b.x) / 2;
     const y = (a.y + b.y) / 2;
     const id = this.nextId++;
-    this.score += CHAIN[tier].price;
+    this.combo = this.comboLeft > 0 ? Math.min(this.combo + 1, COMBO_CAP) : 1;
+    this.comboLeft = COMBO_WINDOW;
+    const gain = CHAIN[tier].price * this.combo;
+    this.score += gain;
     this.merges++;
     this.bodies.push({
       id,
@@ -322,7 +354,7 @@ export class Basket {
       age: 0,
       fresh: true,
     });
-    this.events.push({ type: 'merge', tier, x, y, id });
+    this.events.push({ type: 'merge', tier, x, y, id, combo: this.combo, gain });
     if (tier === FINAL_TIER) this.events.push({ type: 'final', x, y });
   }
 

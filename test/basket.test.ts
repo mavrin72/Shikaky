@@ -149,3 +149,50 @@ describe('basket physics settles', () => {
     expect(Math.abs(body.vx)).toBeLessThan(2);
   });
 });
+
+describe('combo and shake', () => {
+  const stack = (game: Basket, tier: number, x: number, y: number) => {
+    const r = game.radiusOf(tier);
+    game.bodies.push(
+      { id: game.bodies.length + 1, tier, x, y, vx: 0, vy: 0, angle: 0, spin: 0, r, over: 0, age: 9 },
+      { id: game.bodies.length + 2, tier, x: x + r, y, vx: 0, vy: 0, angle: 0, spin: 0, r, over: 0, age: 9 },
+    );
+  };
+
+  it('pays more for merges chained back to back', () => {
+    const game = new Basket(41);
+    stack(game, 0, 80, 300);
+    game.step(1 / 60);
+    const first = game.score;
+    expect(game.combo).toBe(1);
+    stack(game, 0, 240, 300);
+    game.step(1 / 60);
+    expect(game.combo).toBe(2);
+    // Second merge in the chain is worth double.
+    expect(game.score - first).toBe(first * 2);
+  });
+
+  it('lets the combo lapse after the window', () => {
+    const game = new Basket(42);
+    stack(game, 0, 80, 300);
+    game.step(1 / 60);
+    run(game, 2.5);
+    expect(game.combo).toBe(0);
+  });
+
+  it('shakes the pile three times per run and no more', () => {
+    const game = new Basket(43);
+    for (let i = 0; i < 5; i++) {
+      game.drop(60 + i * 40);
+      run(game, 0.5);
+    }
+    run(game, 2);
+    expect(game.bodies.every((body) => Math.abs(body.vx) < 5)).toBe(true);
+    expect(game.shake()).toBe(true);
+    expect(game.bodies.some((body) => Math.abs(body.vx) > 20)).toBe(true);
+    expect(game.shake()).toBe(true);
+    expect(game.shake()).toBe(true);
+    expect(game.shake()).toBe(false);
+    expect(game.shakesLeft).toBe(0);
+  });
+});

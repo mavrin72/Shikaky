@@ -5,161 +5,115 @@ import { buzz, confetti, motionOff, toast } from './fx';
 import { sfx } from './sound';
 
 const TAU = Math.PI * 2;
+const INK = '#1A1410';
 /** The field keeps its own warm ground in both themes: the product colours are
- *  picked to sit on paper, and black outlines need something light behind them. */
-const GROUND_LIGHT = '#FDF4DC';
-const GROUND_DARK = '#EFE4C6';
-const INK = '#111111';
+ *  picked to sit on paper, and dark outlines need something light behind them. */
+const GROUND = ['#FFF7E2', '#F1DFB6'];
+const GROUND_DARK = ['#F0E2C0', '#DCC79A'];
+const WOOD = '#C9A063';
+const WOOD_DARK = '#A9814A';
 
-type Detail = (ctx: CanvasRenderingContext2D, r: number) => void;
+// ---------------------------------------------------------------- colour help
+const hexToRgb = (hex: string): [number, number, number] => {
+  const v = hex.replace('#', '');
+  return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16)) as [number, number, number];
+};
+const mix = (hex: string, target: [number, number, number], amount: number): string => {
+  const rgb = hexToRgb(hex);
+  const out = rgb.map((c, i) => Math.round(c + (target[i] - c) * amount));
+  return `rgb(${out[0]}, ${out[1]}, ${out[2]})`;
+};
+const lighten = (hex: string, amount: number): string => mix(hex, [255, 250, 235], amount);
+const darken = (hex: string, amount: number): string => mix(hex, [26, 20, 16], amount);
+const luminance = (hex: string): number => {
+  const [r, g, b] = hexToRgb(hex);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+};
 
-/** Dark products need a light face, light ones a dark face. */
-function faceInk(fill: string): string {
-  const hex = fill.replace('#', '');
-  const rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-  return luminance > 0.55 ? INK : '#FFF7E4';
-}
-
-interface FaceState {
-  blink: number;
-  mouth: number;
-}
-
-/** Eyes, a mouth, and enough timing to make it feel alive rather than printed. */
-function drawFace(ctx: CanvasRenderingContext2D, r: number, ink: string, state: FaceState): void {
-  const eyeY = -r * 0.14;
-  const eyeX = r * 0.33;
-  const eyeR = r * 0.13;
-  ctx.fillStyle = ink;
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = Math.max(1.6, r * 0.09);
-  ctx.lineCap = 'round';
-
-  for (const side of [-1, 1]) {
-    if (state.blink > 0.5) {
-      ctx.beginPath();
-      ctx.moveTo(side * eyeX - eyeR, eyeY);
-      ctx.lineTo(side * eyeX + eyeR, eyeY);
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.ellipse(side * eyeX, eyeY, eyeR * 0.78, eyeR, 0, 0, TAU);
-      ctx.fill();
-      if (r > 26) {
-        ctx.fillStyle = ink === INK ? '#FFF7E4' : INK;
-        ctx.beginPath();
-        ctx.arc(side * eyeX + eyeR * 0.28, eyeY - eyeR * 0.3, eyeR * 0.3, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = ink;
-      }
-    }
-  }
-
-  const mouthY = r * 0.3;
-  if (state.mouth > 0.05) {
-    // Open mouth: a filled arc, wider the more excited it is.
-    ctx.beginPath();
-    ctx.ellipse(0, mouthY, r * 0.2, r * (0.1 + 0.22 * state.mouth), 0, 0, TAU);
-    ctx.fill();
-  } else {
-    ctx.beginPath();
-    ctx.arc(0, mouthY - r * 0.1, r * 0.22, 0.25 * Math.PI, 0.75 * Math.PI);
-    ctx.stroke();
-  }
-}
+type Detail = (ctx: CanvasRenderingContext2D, r: number, tone: (a: number) => string) => void;
 
 const dots = (ctx: CanvasRenderingContext2D, points: [number, number][], r: number, color: string): void => {
   ctx.fillStyle = color;
   for (const [x, y] of points) {
     ctx.beginPath();
-    ctx.arc(x * r, y * r, r * 0.11, 0, TAU);
+    ctx.arc(x * r, y * r, r * 0.1, 0, TAU);
     ctx.fill();
   }
 };
 
-const stem = (ctx: CanvasRenderingContext2D, r: number, color: string): void => {
+/** A stalk with a leaf — drawn with an outline so it reads at any size. */
+const stalk = (ctx: CanvasRenderingContext2D, r: number, color: string, leaf?: string): void => {
   ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(2, r * 0.13);
+  ctx.lineWidth = Math.max(2, r * 0.12);
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(0, -r * 0.72);
-  ctx.lineTo(r * 0.16, -r * 1.02);
+  ctx.moveTo(0, -r * 0.78);
+  ctx.quadraticCurveTo(r * 0.1, -r * 1.0, r * 0.2, -r * 1.06);
+  ctx.stroke();
+  if (!leaf) return;
+  ctx.fillStyle = leaf;
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = Math.max(1.5, r * 0.05);
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.22, -r * 0.94, r * 0.3, r * 0.14, -0.5, 0, TAU);
+  ctx.fill();
   ctx.stroke();
 };
 
 /** One drawing per chain step — this is what makes a coconut read as a coconut. */
 const DETAILS: Detail[] = [
-  (ctx, r) => dots(ctx, [[-0.5, 0.5], [0.5, 0.52]], r, '#CFCABF'),
-  (ctx, r) => {
-    ctx.strokeStyle = '#3E2260';
-    ctx.lineWidth = Math.max(1.5, r * 0.12);
-    for (const off of [-0.55, 0.55]) {
+  (ctx, r, tone) => dots(ctx, [[-0.5, 0.52], [0.52, 0.5]], r, tone(0.45)),
+  (ctx, r, tone) => {
+    ctx.strokeStyle = tone(0.35);
+    ctx.lineWidth = Math.max(1.5, r * 0.11);
+    for (const off of [-0.58, 0.58]) {
       ctx.beginPath();
-      ctx.arc(off * r, r * 0.1, r * 0.5, -1.2, 1.2);
+      ctx.arc(off * r, r * 0.12, r * 0.46, -1.1, 1.1);
       ctx.stroke();
     }
   },
-  (ctx, r) => dots(ctx, [[-0.58, 0.5], [0.1, 0.68], [0.6, 0.45]], r, '#A9763B'),
-  (ctx, r) => {
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = Math.max(2, r * 0.13);
-    // Shell seam down the side — under the face it read as a second mouth.
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.74, -r * 0.18);
-    ctx.lineTo(-r * 0.6, r * 0.42);
-    ctx.stroke();
-  },
-  (ctx, r) => {
-    dots(ctx, [[-0.6, 0.45], [0.6, 0.42], [0, 0.7]], r, '#C77BD8');
-    stem(ctx, r, '#4B1C58');
-  },
-  (ctx, r) => {
-    ctx.fillStyle = '#1F7A3A';
-    for (const a of [-0.9, -0.3, 0.3, 0.9]) {
-      ctx.beginPath();
-      ctx.moveTo(0, -r * 0.6);
-      ctx.lineTo(Math.cos(a - 1.57) * r * 0.62, -r * 0.6 + Math.sin(a - 1.57) * r * 0.42);
-      ctx.lineTo(Math.cos(a - 1.2) * r * 0.3, -r * 0.42);
-      ctx.closePath();
-      ctx.fill();
-    }
-    stem(ctx, r, '#1F7A3A');
-  },
-  (ctx, r) => {
-    stem(ctx, r, '#6B4A2A');
-    ctx.strokeStyle = '#9DBD33';
-    ctx.lineWidth = Math.max(1.5, r * 0.1);
-    ctx.beginPath();
-    ctx.arc(-r * 0.15, r * 0.15, r * 0.5, 0.4, 1.9);
-    ctx.stroke();
-  },
-  (ctx, r) => {
-    ctx.strokeStyle = '#E2661B';
-    ctx.lineWidth = Math.max(2, r * 0.16);
-    ctx.beginPath();
-    ctx.arc(r * 0.1, r * 0.05, r * 0.55, -2.4, -0.6);
-    ctx.stroke();
-  },
-  (ctx, r) => dots(ctx, [[-0.62, 0.42], [0.62, 0.42], [0, 0.72]], r, INK),
-  (ctx, r) => {
-    ctx.strokeStyle = '#C4530E';
+  (ctx, r, tone) => dots(ctx, [[-0.6, 0.48], [0.08, 0.7], [0.62, 0.44]], r, tone(0.4)),
+  (ctx, r, tone) => {
+    // Shell seam that follows the sphere, instead of a scratch across it.
+    ctx.strokeStyle = tone(0.45);
     ctx.lineWidth = Math.max(2, r * 0.1);
-    for (const off of [-0.45, 0, 0.45]) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.74, Math.PI * 0.72, Math.PI * 1.28);
+    ctx.stroke();
+  },
+  (ctx, r, tone) => {
+    dots(ctx, [[-0.62, 0.44], [0.62, 0.42], [0, 0.72]], r, tone(0.3));
+    stalk(ctx, r, '#4B1C58');
+  },
+  (ctx, r) => stalk(ctx, r, '#2F7D3A', '#3FA04C'),
+  (ctx, r) => stalk(ctx, r, '#7A5228', '#8FBF3A'),
+  (ctx, r, tone) => {
+    ctx.strokeStyle = tone(0.35);
+    ctx.lineWidth = Math.max(2, r * 0.18);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(r * 0.05, r * 0.08, r * 0.62, -2.5, -1.7);
+    ctx.stroke();
+  },
+  (ctx, r, tone) => dots(ctx, [[-0.62, 0.44], [0.62, 0.44], [0, 0.74]], r, tone(0.62)),
+  (ctx, r, tone) => {
+    ctx.strokeStyle = tone(0.35);
+    ctx.lineWidth = Math.max(2, r * 0.09);
+    for (const off of [-0.5, 0, 0.5]) {
       ctx.beginPath();
-      ctx.ellipse(off * r * 0.9, 0, r * 0.22, r * 0.94, 0, 0, TAU);
+      ctx.ellipse(off * r * 0.92, 0, r * 0.2, r * 0.93, 0, 0, TAU);
       ctx.stroke();
     }
-    stem(ctx, r, '#4E7A2A');
+    stalk(ctx, r, '#4E7A2A', '#6FA83A');
   },
-  (ctx, r) => {
+  (ctx, r, tone) => {
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, TAU);
-    ctx.arc(0, r * 0.05, r * 0.62, 0, TAU);
+    ctx.arc(0, r * 0.05, r * 0.6, 0, TAU);
     ctx.clip('evenodd');
-    ctx.strokeStyle = '#B9A23F';
-    ctx.lineWidth = Math.max(1.5, r * 0.07);
+    ctx.strokeStyle = tone(0.3);
+    ctx.lineWidth = Math.max(1.5, r * 0.06);
     for (let i = -2; i <= 2; i++) {
       ctx.beginPath();
       ctx.arc(i * r * 0.42, 0, r * 0.92, -1.2, 1.2);
@@ -171,29 +125,28 @@ const DETAILS: Detail[] = [
     ctx.restore();
   },
   (ctx, r) => {
-    // The basket: weave, rim and handle.
     ctx.save();
     ctx.beginPath();
-    ctx.arc(0, 0, r * 0.98, 0, TAU);
-    ctx.arc(0, r * 0.05, r * 0.6, 0, TAU);
+    ctx.arc(0, 0, r * 0.99, 0, TAU);
+    ctx.arc(0, r * 0.06, r * 0.58, 0, TAU);
     ctx.clip('evenodd');
-    ctx.strokeStyle = '#A9803F';
-    ctx.lineWidth = Math.max(2, r * 0.09);
+    ctx.strokeStyle = WOOD_DARK;
+    ctx.lineWidth = Math.max(2, r * 0.085);
     for (let i = -3; i <= 3; i++) {
       ctx.beginPath();
-      ctx.moveTo(i * r * 0.32, -r);
-      ctx.lineTo(i * r * 0.32, r);
+      ctx.moveTo(i * r * 0.3, -r);
+      ctx.lineTo(i * r * 0.3, r);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(-r, i * r * 0.32);
-      ctx.lineTo(r, i * r * 0.32);
+      ctx.moveTo(-r, i * r * 0.3);
+      ctx.lineTo(r, i * r * 0.3);
       ctx.stroke();
     }
     ctx.restore();
     ctx.strokeStyle = INK;
     ctx.lineWidth = Math.max(2, r * 0.1);
     ctx.beginPath();
-    ctx.arc(0, r * 0.1, r * 0.66, Math.PI, TAU);
+    ctx.arc(0, r * 0.12, r * 0.64, Math.PI, TAU);
     ctx.stroke();
   },
 ];
@@ -202,21 +155,32 @@ export interface BasketViewHandles {
   el: HTMLElement;
   game: Basket;
   restart: () => void;
+  shake: () => void;
   destroy: () => void;
 }
 
 export interface BasketCallbacks {
   onScore: (score: number, best: number) => void;
-  onNext: (tier: number) => void;
+  onNext: (tier: number, after: number) => void;
   onReach: (tier: number) => void;
+  onCombo: (combo: number, left: number) => void;
+  onShakes: (left: number) => void;
   onOver: (score: number, best: number) => void;
 }
 
-export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCallbacks): BasketViewHandles {
+interface Burst { x: number; y: number; r: number; color: string; t: number }
+interface Popup { x: number; y: number; text: string; combo: number; t: number }
+interface Dust { x: number; y: number; vx: number; vy: number; r: number; t: number }
+
+export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
   const game = new Basket();
-  const canvas = h('canvas', { class: 'basket__canvas', 'aria-label': 'Кошик: кидай продукти, однакові зливаються' }) as HTMLCanvasElement;
+  const canvas = h('canvas', {
+    class: 'basket__canvas',
+    'aria-label': 'Кошик: тягни, щоб прицілитись, відпусти — продукт падає',
+  }) as HTMLCanvasElement;
   canvas.tabIndex = 0;
   const wrap = h('div', { class: 'basket' }, canvas);
+  const ctx = canvas.getContext('2d');
 
   let aimX = game.width / 2;
   let running = true;
@@ -229,21 +193,19 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
   let shownScore = -1;
   let shownNext = -1;
   let shownTop = -1;
+  let shownShakes = -1;
 
-  // Purely visual state — the physics core knows nothing about any of this.
-  interface Burst { x: number; y: number; r: number; color: string; t: number }
-  interface Popup { x: number; y: number; text: string; t: number }
   const bursts: Burst[] = [];
   const popups: Popup[] = [];
+  const dust: Dust[] = [];
   const pops = new Map<number, number>();
   const squash = new Map<number, number>();
   const impactSpeed = new Map<number, number>();
-  const faces = new Map<number, { nextBlink: number; blinkUntil: number; mouth: number }>();
-  let shake = 0;
+  const faces = new Map<number, { nextBlink: number; blinkUntil: number; wink: boolean; mouth: number }>();
+  const skins = new Map<number, CanvasGradient>();
+  let shakeAmount = 0;
   let flash = 0;
   let clock = 0;
-
-  const ctx = canvas.getContext('2d');
 
   function resize(): void {
     const cssWidth = wrap.clientWidth || 340;
@@ -253,116 +215,190 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
     scale = (cssWidth * dpr) / game.width;
+    skins.clear();
   }
 
-  function worldX(clientX: number): number {
+  const worldX = (clientX: number): number => {
     const box = canvas.getBoundingClientRect();
     return clamp(((clientX - box.left) / box.width) * game.width, 0, game.width);
+  };
+
+  /** Cached per tier: a sun-lit sphere gradient, not a flat disc. */
+  function skinOf(tier: number, r: number): CanvasGradient | string {
+    if (!ctx) return CHAIN[tier].fill;
+    const cached = skins.get(tier);
+    if (cached) return cached;
+    const fill = CHAIN[tier].fill;
+    const grad = ctx.createRadialGradient(-r * 0.34, -r * 0.4, r * 0.06, 0, 0, r * 1.18);
+    grad.addColorStop(0, lighten(fill, 0.42));
+    grad.addColorStop(0.42, fill);
+    grad.addColorStop(1, darken(fill, 0.3));
+    skins.set(tier, grad);
+    return grad;
   }
 
-  function drawBody(body: Body): void {
+  function drawFace(r: number, fill: string, id: number): void {
+    if (!ctx) return;
+    let face = faces.get(id);
+    if (!face) {
+      face = { nextBlink: clock + 1 + Math.random() * 5, blinkUntil: 0, wink: false, mouth: 0 };
+      faces.set(id, face);
+    }
+    const blinking = clock < face.blinkUntil;
+    const ink = luminance(fill) > 0.5 ? INK : '#FFF7E4';
+    const eyeY = -r * 0.1;
+    const eyeX = r * 0.32;
+    const eyeR = r * 0.155;
+
+    // Cheeks first, so the eyes sit on top of them.
+    ctx.fillStyle = luminance(fill) > 0.5 ? 'rgba(255,90,120,0.28)' : 'rgba(255,140,160,0.26)';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(side * r * 0.52, r * 0.2, r * 0.17, r * 0.11, 0, 0, TAU);
+      ctx.fill();
+    }
+
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      const shut = blinking && (!face.wink || side < 0);
+      ctx.strokeStyle = ink;
+      ctx.fillStyle = ink;
+      ctx.lineWidth = Math.max(1.8, r * 0.09);
+      if (shut) {
+        ctx.beginPath();
+        ctx.arc(side * eyeX, eyeY + eyeR * 0.2, eyeR * 0.9, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.ellipse(side * eyeX, eyeY, eyeR * 0.82, eyeR, 0, 0, TAU);
+        ctx.fill();
+        if (r > 22) {
+          ctx.fillStyle = ink === INK ? '#FFFDF6' : INK;
+          ctx.beginPath();
+          ctx.arc(side * eyeX + eyeR * 0.3, eyeY - eyeR * 0.34, eyeR * 0.32, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.strokeStyle = ink;
+    ctx.fillStyle = ink;
+    ctx.lineWidth = Math.max(1.8, r * 0.085);
+    const mouthY = r * 0.32;
+    if (face.mouth > 0.06) {
+      ctx.beginPath();
+      ctx.ellipse(0, mouthY, r * (0.13 + 0.09 * face.mouth), r * (0.09 + 0.2 * face.mouth), 0, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, mouthY - r * 0.13, r * 0.22, 0.22 * Math.PI, 0.78 * Math.PI);
+      ctx.stroke();
+    }
+  }
+
+  function drawBody(body: Body, preview = false): void {
     if (!ctx) return;
     const item = CHAIN[body.tier];
     const pop = pops.get(body.id) ?? 0;
     const hit = squash.get(body.id) ?? 0;
-    // Born big and settling down; squashed flat for a moment on a hard landing.
-    const grow = 1 + 0.4 * Math.sin(Math.PI * pop);
-    const sx = grow * (1 + 0.22 * hit);
-    const sy = grow * (1 - 0.22 * hit);
+    const grow = 1 + 0.42 * Math.sin(Math.PI * pop);
+    const sx = grow * (1 + 0.2 * hit);
+    const sy = grow * (1 - 0.2 * hit);
+    const tone = (a: number): string => darken(item.fill, a);
 
     ctx.save();
-    ctx.translate(body.x, body.y + body.r * 0.22 * hit);
+    ctx.translate(body.x, body.y + body.r * 0.2 * hit);
+    ctx.globalAlpha = preview ? 0.96 : 1;
     ctx.scale(sx, sy);
-    ctx.fillStyle = 'rgba(17,17,17,0.92)';
-    ctx.beginPath();
-    ctx.arc(body.r * 0.07 + 2, body.r * 0.09 + 2.5, body.r, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = item.fill;
+
+    // Body: lit sphere, dark rim, glossy highlight.
+    ctx.fillStyle = skinOf(body.tier, body.r);
     ctx.beginPath();
     ctx.arc(0, 0, body.r, 0, TAU);
     ctx.fill();
-    ctx.lineWidth = Math.max(2, body.r * 0.1);
-    ctx.strokeStyle = INK;
-    ctx.stroke();
-    ctx.rotate(body.angle);
-    DETAILS[body.tier]?.(ctx, body.r);
 
-    let face = faces.get(body.id);
-    if (!face) {
-      face = { nextBlink: clock + 1 + Math.random() * 5, blinkUntil: 0, mouth: 0 };
-      faces.set(body.id, face);
-    }
-    drawFace(ctx, body.r, faceInk(item.fill), {
-      blink: clock < face.blinkUntil ? 1 : 0,
-      mouth: face.mouth,
-    });
-    ctx.restore();
-  }
-
-  /** Hard-edged shards, never a soft glow — the style does not blur. */
-  function drawBurst(burst: Burst): void {
-    if (!ctx) return;
-    const p = burst.t / 0.45;
-    const ring = burst.r * (1 + 1.5 * p);
     ctx.save();
-    ctx.globalAlpha = 1 - p;
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 5 * (1 - p) + 1;
+    ctx.clip();
+    ctx.fillStyle = 'rgba(26,20,16,0.16)';
     ctx.beginPath();
-    ctx.arc(burst.x, burst.y, ring, 0, TAU);
-    ctx.stroke();
-    ctx.fillStyle = burst.color;
+    ctx.ellipse(body.r * 0.15, body.r * 1.02, body.r * 1.05, body.r * 0.52, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.lineWidth = Math.max(2.2, body.r * 0.085);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * TAU + burst.r;
-      const d = burst.r * (0.9 + 1.7 * p);
-      const size = burst.r * 0.26 * (1 - p * 0.6);
-      ctx.save();
-      ctx.translate(burst.x + Math.cos(a) * d, burst.y + Math.sin(a) * d);
-      ctx.rotate(a + p * 3);
-      ctx.fillRect(-size / 2, -size / 2, size, size);
-      ctx.strokeRect(-size / 2, -size / 2, size, size);
-      ctx.restore();
-    }
-    ctx.restore();
-  }
+    ctx.beginPath();
+    ctx.arc(0, 0, body.r, 0, TAU);
+    ctx.stroke();
 
-  function drawPopup(popup: Popup): void {
-    if (!ctx) return;
-    const p = popup.t / 0.9;
     ctx.save();
-    ctx.globalAlpha = 1 - p * p;
-    ctx.font = '900 20px Rubik, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = '#FFF7E4';
-    ctx.strokeText(popup.text, popup.x, popup.y - 34 * p);
-    ctx.fillStyle = INK;
-    ctx.fillText(popup.text, popup.x, popup.y - 34 * p);
+    ctx.rotate(body.angle);
+    DETAILS[body.tier]?.(ctx, body.r, tone);
+    drawFace(body.r, item.fill, body.id);
+    ctx.restore();
+
+    // Gloss stays put: the light does not roll with the fruit.
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(-body.r * 0.36, -body.r * 0.44, body.r * 0.3, body.r * 0.17, -0.7, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.beginPath();
+    ctx.arc(-body.r * 0.15, -body.r * 0.62, body.r * 0.07, 0, TAU);
+    ctx.fill();
     ctx.restore();
   }
 
-  function draw(): void {
+  function drawBackground(): void {
     if (!ctx) return;
-    const jolt = motionOff() ? 0 : shake;
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.fillStyle = dark ? GROUND_DARK : GROUND_LIGHT;
+    const tones = dark ? GROUND_DARK : GROUND;
+    const sky = ctx.createLinearGradient(0, 0, 0, game.height);
+    sky.addColorStop(0, tones[0]);
+    sky.addColorStop(1, tones[1]);
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, game.width, game.height);
-    ctx.translate((Math.random() - 0.5) * jolt, (Math.random() - 0.5) * jolt);
 
-    // The basket itself: a woven floor the goods sit in.
-    const floor = 30;
-    ctx.fillStyle = '#DCC08A';
+    ctx.fillStyle = 'rgba(26,20,16,0.05)';
+    for (let y = 14; y < game.height; y += 26) {
+      for (let x = (y % 52 === 14 ? 14 : 27); x < game.width; x += 26) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.6, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // Crate walls left and right, woven floor below.
+    const rail = 7;
+    for (const x of [0, game.width - rail]) {
+      ctx.fillStyle = WOOD;
+      ctx.fillRect(x, 0, rail, game.height);
+      ctx.strokeStyle = WOOD_DARK;
+      ctx.lineWidth = 1.5;
+      for (let y = 8; y < game.height; y += 17) {
+        ctx.beginPath();
+        ctx.moveTo(x + 1, y);
+        ctx.lineTo(x + rail - 1, y + 6);
+        ctx.stroke();
+      }
+    }
+
+    const floor = 34;
+    ctx.fillStyle = WOOD;
     ctx.fillRect(0, game.height - floor, game.width, floor);
-    ctx.strokeStyle = '#B8965F';
+    ctx.strokeStyle = WOOD_DARK;
     ctx.lineWidth = 3;
-    for (let x = 6; x < game.width; x += 22) {
+    for (let x = 8; x < game.width; x += 21) {
       ctx.beginPath();
-      ctx.moveTo(x, game.height - floor);
+      ctx.moveTo(x, game.height - floor + 2);
       ctx.lineTo(x, game.height);
       ctx.stroke();
     }
+    ctx.strokeStyle = 'rgba(255,247,226,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, game.height - floor + 11);
+    ctx.lineTo(game.width, game.height - floor + 11);
+    ctx.stroke();
     ctx.strokeStyle = INK;
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -370,64 +406,169 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     ctx.lineTo(game.width, game.height - floor);
     ctx.stroke();
 
-    // Danger line: quiet until something is actually up there, then it pulses.
+    const vignette = ctx.createRadialGradient(
+      game.width / 2, game.height * 0.45, game.width * 0.3,
+      game.width / 2, game.height * 0.45, game.width * 0.95,
+    );
+    vignette.addColorStop(0, 'rgba(26,20,16,0)');
+    vignette.addColorStop(1, 'rgba(26,20,16,0.16)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, game.width, game.height);
+  }
+
+  function drawDangerLine(): void {
+    if (!ctx) return;
     const danger = game.bodies.some((body) => body.age > 0.7 && body.y - body.r < game.lineY);
-    const pulse = danger ? 0.55 + 0.45 * Math.sin(clock * 9) : 1;
+    const pulse = danger ? 0.5 + 0.5 * Math.sin(clock * 9) : 1;
     if (danger) {
-      const grad = ctx.createLinearGradient(0, 0, 0, game.lineY + 40);
-      grad.addColorStop(0, `rgba(255,46,46,${0.32 * pulse})`);
+      const grad = ctx.createLinearGradient(0, 0, 0, game.lineY + 46);
+      grad.addColorStop(0, `rgba(255,46,46,${0.34 * pulse})`);
       grad.addColorStop(1, 'rgba(255,46,46,0)');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, game.width, game.lineY + 40);
+      ctx.fillRect(0, 0, game.width, game.lineY + 46);
     }
+    ctx.save();
+    ctx.globalAlpha = danger ? 0.6 + 0.4 * pulse : 0.85;
     ctx.strokeStyle = '#FF2E2E';
-    ctx.globalAlpha = danger ? pulse : 1;
-    ctx.lineWidth = danger ? 4 : 2;
-    ctx.setLineDash([9, 7]);
+    ctx.lineWidth = danger ? 4 : 2.5;
+    ctx.setLineDash([10, 8]);
     ctx.beginPath();
     ctx.moveTo(0, game.lineY);
     ctx.lineTo(game.width, game.lineY);
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawEffects(): void {
+    if (!ctx) return;
+    for (const puff of dust) {
+      const p = puff.t / 0.5;
+      ctx.save();
+      ctx.globalAlpha = (1 - p) * 0.5;
+      ctx.fillStyle = '#FFF3D6';
+      ctx.beginPath();
+      ctx.arc(puff.x, puff.y, puff.r * (1 + p * 1.6), 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    for (const burst of bursts) {
+      const p = burst.t / 0.45;
+      ctx.save();
+      ctx.globalAlpha = 1 - p;
+      ctx.strokeStyle = '#FFF7E4';
+      ctx.lineWidth = 7 * (1 - p) + 1;
+      ctx.beginPath();
+      ctx.arc(burst.x, burst.y, burst.r * (1 + 1.2 * p), 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3 * (1 - p) + 1;
+      ctx.beginPath();
+      ctx.arc(burst.x, burst.y, burst.r * (1 + 1.45 * p), 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = burst.color;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + burst.r;
+        const d = burst.r * (0.9 + 1.8 * p);
+        const size = burst.r * 0.24 * (1 - p * 0.65);
+        ctx.save();
+        ctx.translate(burst.x + Math.cos(a) * d, burst.y + Math.sin(a) * d - p * 12);
+        ctx.rotate(a + p * 3.4);
+        ctx.beginPath();
+        ctx.roundRect(-size / 2, -size / 2, size, size, size * 0.3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    for (const popup of popups) {
+      const p = popup.t / 0.95;
+      ctx.save();
+      ctx.globalAlpha = 1 - p * p;
+      ctx.translate(popup.x, popup.y - 42 * p);
+      if (popup.combo > 1) {
+        ctx.fillStyle = '#FF3D7F';
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(-38, -40, 76, 26, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#FFF7E4';
+        ctx.font = '900 17px Rubik, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`КОМБО ×${popup.combo}`, 0, -21);
+      }
+      ctx.font = '900 22px Rubik, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#FFF7E4';
+      ctx.strokeText(popup.text, 0, 0);
+      ctx.fillStyle = INK;
+      ctx.fillText(popup.text, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  function draw(): void {
+    if (!ctx) return;
+    const jolt = motionOff() ? 0 : shakeAmount;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    drawBackground();
+    ctx.translate((Math.random() - 0.5) * jolt, (Math.random() - 0.5) * jolt);
+    drawDangerLine();
+
+    // Contact shadows in one pass, so the pile sits on the floor instead of floating.
+    ctx.fillStyle = 'rgba(26,20,16,0.13)';
+    for (const body of game.bodies) {
+      ctx.beginPath();
+      ctx.ellipse(body.x + body.r * 0.1, body.y + body.r * 0.86, body.r * 0.92, body.r * 0.3, 0, 0, TAU);
+      ctx.fill();
+    }
 
     if (!game.over && game.canDrop) {
       const r = game.radiusOf(game.next);
       const x = clamp(aimX, r + 2, game.width - r - 2);
-      ctx.strokeStyle = 'rgba(17,17,17,0.28)';
+      ctx.save();
+      ctx.strokeStyle = 'rgba(26,20,16,0.3)';
       ctx.lineWidth = 2;
-      ctx.setLineDash([5, 7]);
+      ctx.setLineDash([4, 8]);
       ctx.beginPath();
       ctx.moveTo(x, game.lineY);
-      ctx.lineTo(x, game.height);
+      ctx.lineTo(x, game.height - 34);
       ctx.stroke();
-      ctx.setLineDash([]);
-      const bob = motionOff() ? 0 : Math.sin(clock * 3.4) * 3;
-      drawBody({ id: -1, tier: game.next, x, y: game.lineY - r - 8 + bob, vx: 0, vy: 0, angle: 0, spin: 0, r, over: 0, age: 9 });
+      ctx.restore();
+      const bob = motionOff() ? 0 : Math.sin(clock * 3.2) * 3;
+      drawBody({ id: -1, tier: game.next, x, y: game.lineY - r - 10 + bob, vx: 0, vy: 0, angle: 0, spin: 0, r, over: 0, age: 9 }, true);
     }
 
     for (const body of game.bodies) drawBody(body);
-    for (const burst of bursts) drawBurst(burst);
-    for (const popup of popups) drawPopup(popup);
+    drawEffects();
 
     if (flash > 0.01) {
-      ctx.fillStyle = `rgba(255,247,228,${flash * 0.65})`;
+      ctx.fillStyle = `rgba(255,247,228,${flash * 0.6})`;
       ctx.fillRect(0, 0, game.width, game.height);
     }
 
     if (game.over) {
-      ctx.fillStyle = 'rgba(17,17,17,0.55)';
+      ctx.fillStyle = 'rgba(26,20,16,0.58)';
       ctx.fillRect(0, 0, game.width, game.height);
       ctx.save();
       ctx.translate(game.width / 2, game.height / 2);
-      ctx.rotate(-0.1);
+      ctx.rotate(-0.09);
       ctx.fillStyle = '#FF2E2E';
-      ctx.fillRect(-130, -26, 260, 52);
       ctx.strokeStyle = '#FFF7E4';
       ctx.lineWidth = 4;
-      ctx.strokeRect(-130, -26, 260, 52);
+      ctx.beginPath();
+      ctx.roundRect(-136, -30, 272, 60, 8);
+      ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = '#FFF7E4';
-      ctx.font = '900 27px Rubik, system-ui, sans-serif';
+      ctx.font = '900 28px Rubik, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('ПЕРЕПОВНЕНО', 0, 2);
@@ -439,17 +580,22 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     for (const event of game.drain()) {
       if (event.type === 'drop') {
         sfx.tap();
+      } else if (event.type === 'shake') {
+        sfx.erase();
+        buzz([14, 30, 14]);
+        shakeAmount = 18;
+        cb.onShakes(game.shakesLeft);
       } else if (event.type === 'merge') {
         sfx.merge(event.tier);
         buzz(event.tier > 6 ? 18 : 8);
         pops.set(event.id, 1);
-        // The new product gasps when it appears.
-        faces.set(event.id, { nextBlink: clock + 1.5 + Math.random() * 4, blinkUntil: 0, mouth: 1 });
+        faces.set(event.id, { nextBlink: clock + 1.5 + Math.random() * 4, blinkUntil: 0, wink: false, mouth: 1 });
         if (!motionOff()) {
           bursts.push({ x: event.x, y: event.y, r: game.radiusOf(event.tier), color: CHAIN[event.tier].fill, t: 0 });
-          shake = Math.min(14, shake + 2 + event.tier * 0.9);
+          shakeAmount = Math.min(16, shakeAmount + 2 + event.tier);
         }
-        popups.push({ x: event.x, y: event.y, text: `+${CHAIN[event.tier].price}`, t: 0 });
+        popups.push({ x: event.x, y: event.y, text: `+${event.gain}`, combo: event.combo, t: 0 });
+        cb.onCombo(game.combo, game.comboLeft);
       } else if (event.type === 'final') {
         sfx.win();
         flash = 1;
@@ -462,7 +608,7 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
       } else if (event.type === 'over') {
         sfx.wrong();
         const { best } = recordBasket(game.score);
-        onOver(game.score, best);
+        cb.onOver(game.score, best);
       }
     }
   }
@@ -480,8 +626,9 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
       accumulator -= fixed;
       steps++;
     }
+
     clock += dt;
-    shake *= 0.86;
+    shakeAmount *= 0.86;
     flash *= 0.92;
     for (let i = bursts.length - 1; i >= 0; i--) {
       bursts[i].t += dt;
@@ -489,7 +636,14 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     }
     for (let i = popups.length - 1; i >= 0; i--) {
       popups[i].t += dt;
-      if (popups[i].t > 0.9) popups.splice(i, 1);
+      if (popups[i].t > 0.95) popups.splice(i, 1);
+    }
+    for (let i = dust.length - 1; i >= 0; i--) {
+      dust[i].t += dt;
+      dust[i].x += dust[i].vx * dt;
+      dust[i].y += dust[i].vy * dt;
+      dust[i].vy += 120 * dt;
+      if (dust[i].t > 0.5) dust.splice(i, 1);
     }
     for (const [id, value] of pops) {
       const left = value - dt * 4;
@@ -503,19 +657,33 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     }
     for (const face of faces.values()) {
       if (clock > face.nextBlink) {
-        face.blinkUntil = clock + 0.12;
+        face.blinkUntil = clock + 0.13;
+        face.wink = Math.random() < 0.35;
         face.nextBlink = clock + 2 + Math.random() * 5;
       }
       face.mouth = Math.max(0, face.mouth - dt * 2.2);
     }
     if (faces.size > 200) faces.clear();
+
     // A body that just lost a lot of downward speed has hit something.
     for (const body of game.bodies) {
       const before = impactSpeed.get(body.id) ?? 0;
       if (before > 260 && body.vy < before * 0.45) {
-        if (!motionOff()) squash.set(body.id, Math.min(1, before / 1100));
         const face = faces.get(body.id);
         if (face) face.mouth = Math.max(face.mouth, Math.min(0.7, before / 900));
+        if (!motionOff()) {
+          squash.set(body.id, Math.min(1, before / 1100));
+          for (let i = 0; i < 4; i++) {
+            dust.push({
+              x: body.x + (Math.random() - 0.5) * body.r,
+              y: body.y + body.r * 0.8,
+              vx: (Math.random() - 0.5) * 90,
+              vy: -30 - Math.random() * 50,
+              r: 3 + Math.random() * 4,
+              t: 0,
+            });
+          }
+        }
       }
       impactSpeed.set(body.id, body.vy);
     }
@@ -525,21 +693,28 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     if (now - themeCheck > 500) {
       themeCheck = now;
       dark = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().startsWith('#1');
+      skins.clear();
     }
     draw();
+
     if (game.score !== shownScore) {
       shownScore = game.score;
-      onScore(game.score, Math.max(basketBest(), game.score));
+      cb.onScore(game.score, Math.max(basketBest(), game.score));
     }
     if (game.next !== shownNext) {
       shownNext = game.next;
-      onNext(game.next);
+      cb.onNext(game.next, game.queued);
+    }
+    if (game.shakesLeft !== shownShakes) {
+      shownShakes = game.shakesLeft;
+      cb.onShakes(game.shakesLeft);
     }
     const top = game.bodies.reduce((max, body) => Math.max(max, body.tier), -1);
     if (top > shownTop) {
       shownTop = top;
-      onReach(top);
+      cb.onReach(top);
     }
+    cb.onCombo(game.combo, game.comboLeft);
   }
 
   let dragging = false;
@@ -549,8 +724,7 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
     dragging = true;
     aimX = worldX(event.clientX);
   });
-  // Touch events report pressure 0 on plenty of phones, so the drag state has to
-  // be tracked explicitly — otherwise the product simply ignores your finger.
+  // Touch reports pressure 0 on plenty of phones, so drag state is tracked here.
   canvas.addEventListener('pointermove', (event) => {
     if (dragging || event.pointerType === 'mouse') aimX = worldX(event.clientX);
   });
@@ -585,17 +759,22 @@ export function createBasketView({ onScore, onNext, onReach, onOver }: BasketCal
       game.reset();
       bursts.length = 0;
       popups.length = 0;
+      dust.length = 0;
       pops.clear();
       squash.clear();
       impactSpeed.clear();
       faces.clear();
-      shake = 0;
+      shakeAmount = 0;
       flash = 0;
       shownScore = -1;
       shownNext = -1;
       shownTop = -1;
+      shownShakes = -1;
       last = performance.now();
       accumulator = 0;
+    },
+    shake: () => {
+      if (!game.shake()) toast('Струси закінчились');
     },
     destroy: () => {
       // Leaving mid-run still counts: the score is real, it just was not lost yet.
