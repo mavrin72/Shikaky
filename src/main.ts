@@ -3,7 +3,7 @@ import './styles/board.css';
 import './styles/screens.css';
 
 import { TOTAL_LEVELS } from './core/levels';
-import { levelsScreen, menuScreen, playScreen } from './ui/screens';
+import { basketScreen, levelsScreen, menuScreen, playScreen } from './ui/screens';
 import { applyTheme } from './ui/modals';
 import { armAudio } from './ui/sound';
 
@@ -20,6 +20,7 @@ function route(): void {
     }
   }
   if (hash === 'daily') return playScreen('daily');
+  if (hash === 'basket') return basketScreen();
   if (hash === 'levels') return levelsScreen();
   return menuScreen();
 }

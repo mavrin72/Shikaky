@@ -20,6 +20,9 @@ import {
   resetProgress,
   solvedCount,
 } from '../core/storage';
+import { CHAIN } from '../core/basket';
+import { basketBest, basketTop, recordBasket } from '../core/storage';
+import { createBasketView } from './basket';
 import { BoardView } from './board';
 import { h } from './dom';
 import { confetti, toast } from './fx';
@@ -51,7 +54,7 @@ export function mount(screen: HTMLElement, dispose?: () => void): void {
   window.scrollTo(0, 0);
 }
 
-function topbar(title: string, subtitle?: string, back?: string): HTMLElement {
+function topbar(title: string, subtitle?: string, back?: string, rules: () => void = openRules): HTMLElement {
   return h(
     'div',
     { class: 'topbar' },
@@ -74,7 +77,7 @@ function topbar(title: string, subtitle?: string, back?: string): HTMLElement {
         class: 'btn btn--icon',
         type: 'button',
         'aria-label': 'Правила',
-        onclick: () => openRules(),
+        onclick: () => rules(),
       },
       '?',
     ),
@@ -124,6 +127,11 @@ export function menuScreen(): void {
         ),
         h('button', { class: 'btn btn--blue btn--big', type: 'button', onclick: () => go('#/levels') }, 'Рівні'),
         h('button', { class: 'btn btn--green btn--big', type: 'button', onclick: () => go('#/daily') }, 'Щоденна'),
+        h(
+          'button',
+          { class: 'btn btn--pink btn--big', type: 'button', onclick: () => go('#/basket') },
+          basketBest() ? `Кошик · ₴${basketBest()}` : 'Кошик',
+        ),
         h('button', { class: 'btn btn--big', type: 'button', onclick: () => openRules() }, 'Як грати'),
       ),
       h(
@@ -379,4 +387,146 @@ export function playScreen(target: number | 'daily'): void {
     board.destroy();
   });
   syncHud();
+}
+
+
+// ---------------------------------------------------------------- basket
+function basketRules(): void {
+  openSheet((close) =>
+    h(
+      'div',
+      { class: 'sheet' },
+      h('h2', {}, 'Кошик'),
+      h('p', {}, 'Збери покупки: дві однакові штуки зливаються в наступну за розміром.'),
+      h(
+        'ol',
+        { class: 'rules' },
+        h('li', {}, h('b', {}, '1'), h('span', {}, 'Тягни пальцем угорі — цілишся. Відпустив — продукт падає.')),
+        h('li', {}, h('b', {}, '2'), h('span', {}, 'Два однакові продукти, що торкнулись, стають одним більшим.')),
+        h('li', {}, h('b', {}, '3'), h('span', {}, 'Ланцюжок: чіа → родзинка → арахіс → … → диня → кошик.')),
+        h('li', {}, h('b', {}, '4'), h('span', {}, 'Падають лише п\'ять найдрібніших — решту треба виростити.')),
+        h('li', {}, h('b', {}, '5'), h('span', {}, 'Якщо щось лишається над червоною лінією — кінець спроби.')),
+      ),
+      h('p', {}, 'Очки — це чек: що більший продукт зібрав, то дорожчий. Назви взяті з каталогу Сільпо.'),
+      h('button', { class: 'btn btn--primary', type: 'button', onclick: close }, 'Ясно'),
+    ),
+  );
+}
+
+export function basketScreen(): void {
+  const scoreEl = h('div', { class: 'hud__level' }, '₴0', h('span', { class: 'hud__tier' }, 'кошик'));
+  const bestEl = h('div', { class: 'hud__timer' }, `рекорд ₴${basketBest()}`);
+  const nextEl = h('div', { class: 'nextup' });
+  const chain = h('div', { class: 'chain' });
+
+  const nodes = CHAIN.map((item, tier) => {
+    const dot = h('i', {
+      class: 'chain__dot',
+      title: `${item.name}${item.price ? ` · ₴${item.price}` : ''}`,
+    });
+    dot.style.background = item.fill;
+    dot.style.width = `${10 + tier * 2.2}px`;
+    dot.style.height = `${10 + tier * 2.2}px`;
+    if (tier <= basketTop()) dot.classList.add('chain__dot--got');
+    chain.append(dot);
+    return dot;
+  });
+
+  function showNext(tier: number): void {
+    const item = CHAIN[tier];
+    nextEl.replaceChildren(
+      h('span', { class: 'nextup__label' }, 'далі'),
+      (() => {
+        const dot = h('i', { class: 'nextup__dot' });
+        dot.style.background = item.fill;
+        return dot;
+      })(),
+      h('span', { class: 'nextup__name' }, item.short),
+    );
+  }
+
+  const view = createBasketView({
+    onScore: (score, best) => {
+      scoreEl.firstChild!.textContent = `₴${score}`;
+      bestEl.textContent = `рекорд ₴${best}`;
+    },
+    onNext: showNext,
+    onReach: (tier) => {
+      recordBasket(0, tier);
+      nodes.forEach((dot, i) => dot.classList.toggle('chain__dot--got', i <= Math.max(tier, basketTop())));
+    },
+    onOver: (score, best) => {
+      openSheet((close) =>
+        h(
+          'div',
+          { class: 'sheet' },
+          h('h2', {}, score >= best ? 'Рекорд!' : 'Кошик переповнено'),
+          h(
+            'div',
+            { class: 'result' },
+            h('div', {}, h('b', {}, `₴${score}`), h('span', {}, 'чек')),
+            h('div', {}, h('b', {}, `₴${best}`), h('span', {}, 'рекорд')),
+            h('div', {}, h('b', {}, CHAIN[Math.max(basketTop(), 0)].short), h('span', {}, 'найбільше')),
+          ),
+          h('p', {}, 'Стос переріс червону лінію. Найбільший продукт злиття лишається в колекції.'),
+          h(
+            'div',
+            { class: 'sheet__row' },
+            h(
+              'button',
+              {
+                class: 'btn btn--primary',
+                type: 'button',
+                onclick: () => {
+                  close();
+                  view.restart();
+                },
+              },
+              'Ще раз',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn',
+                type: 'button',
+                onclick: () => {
+                  close();
+                  go('#/');
+                },
+              },
+              'У меню',
+            ),
+          ),
+        ),
+      );
+    },
+  });
+
+  const again = h(
+    'button',
+    {
+      class: 'btn btn--pink',
+      type: 'button',
+      onclick: () => {
+        view.restart();
+        toast('Нова спроба');
+      },
+    },
+    'Заново',
+  );
+
+  mount(
+    h(
+      'div',
+      { class: 'screen play' },
+      topbar('Shikaky', undefined, '#/', basketRules),
+      h('div', { class: 'hud' }, scoreEl, bestEl),
+      view.el,
+      h('div', { class: 'tools' }, nextEl, again),
+      h('div', { class: 'chain-wrap' }, chain),
+      h('p', { class: 'progress-note' }, 'Тягни, щоб прицілитись, відпусти — впаде. Дві однакові зливаються в наступний продукт. Не дай стосу перерости червону лінію.'),
+    ),
+    () => view.destroy(),
+  );
+  showNext(view.game.next);
 }

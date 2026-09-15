@@ -222,3 +222,47 @@
   .tools .btn { padding: 10px 8px; font-size: 13px; }
   .screen { padding-inline: 14px; }
 }
+
+/* ---------- basket (merge game) ---------- */
+.basket {
+  width: min(92vw, 22rem);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  box-shadow: 7px 7px 0 var(--shadow);
+  overflow: hidden;
+  line-height: 0;
+  background: #FDF4DC;
+}
+.basket__canvas { display: block; width: 100%; touch-action: none; cursor: pointer; }
+.basket__canvas:focus-visible { outline: 3px solid var(--pink); outline-offset: -3px; }
+
+.nextup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 14px;
+}
+.nextup__label {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.nextup__dot { width: 18px; height: 18px; border: 2px solid var(--frame); border-radius: 999px; display: block; }
+
+.chain-wrap { width: min(92vw, 22rem); }
+.chain { display: flex; align-items: center; justify-content: space-between; gap: 3px; }
+.chain__dot {
+  display: block;
+  border: 2px solid var(--frame);
+  border-radius: 999px;
+  opacity: 0.3;
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-slam);
+}
+.chain__dot--got { opacity: 1; transform: scale(1.05); }

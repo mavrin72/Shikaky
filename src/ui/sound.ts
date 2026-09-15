@@ -106,6 +106,12 @@ export const sfx = {
     tone({ from: 98, type: 'square', dur: 0.16, gain: 0.05, delay: 0.05 });
   },
   hint: () => tone({ from: 660, to: 990, type: 'triangle', dur: 0.16, gain: 0.06 }),
+  /** Pitch climbs with the chain, so a big merge sounds like a big merge. */
+  merge: (tier: number) => {
+    const base = 240 * Math.pow(1.13, tier);
+    tone({ from: base, to: base * 1.5, type: 'square', dur: 0.1, gain: 0.07 });
+    tone({ from: base * 2, type: 'triangle', dur: 0.14, gain: 0.05, delay: 0.03 });
+  },
   win: () => {
     [523, 659, 784, 1047].forEach((freq, i) =>
       tone({ from: freq, type: 'square', dur: 0.16, gain: 0.07, delay: i * 0.09 }),

@@ -17,6 +17,8 @@ interface Save {
   solved: Record<string, LevelRecord>;
   last: number;
   daily: Record<string, number>;
+  /** Best score in the Кошик merge game, and the best chain step ever reached. */
+  basket: { best: number; top: number };
   settings: Settings;
 }
 
@@ -27,6 +29,7 @@ const fresh = (): Save => ({
   solved: {},
   last: 1,
   daily: {},
+  basket: { best: 0, top: -1 },
   settings: { sound: true, theme: 'system', fx: true },
 });
 
@@ -72,6 +75,7 @@ function load(): Save {
       v: 2,
       solved: parsed.v === 2 ? solved : migrateV1(solved),
       daily: parsed.daily ?? {},
+      basket: { ...base.basket, ...(parsed.basket ?? {}) },
       settings: { ...base.settings, ...(parsed.settings ?? {}) },
     };
   } catch {
@@ -133,6 +137,16 @@ export function recordDaily(key: string, time: number): void {
     state.daily[key] = time;
     persist();
   }
+}
+
+export const basketBest = (): number => state.basket.best;
+export const basketTop = (): number => state.basket.top;
+
+export function recordBasket(score: number, top = -1): { best: number } {
+  if (score > state.basket.best) state.basket.best = score;
+  if (top > state.basket.top) state.basket.top = top;
+  persist();
+  return { best: state.basket.best };
 }
 
 export function resetProgress(): void {
