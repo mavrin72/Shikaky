@@ -1,10 +1,21 @@
 import gsap from 'gsap';
-import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { AdvancedBloomFilter, GodrayFilter } from 'pixi-filters';
+import { Application, BlurFilter, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { CHAIN, FINAL_TIER, frogData, Pond } from '../core/pond';
 import { basketBest, recordBasket } from '../core/storage';
 import { clamp, h } from './dom';
 import { buzz, confetti, motionOff, toast } from './fx';
-import { frogCanvas, isLight, lighten, shadowCanvas, TEX_SCALE } from './frogArt';
+import {
+  bokehCanvas,
+  frogCanvas,
+  glassCanvas,
+  isLight,
+  lighten,
+  lilyCanvas,
+  pondBackdropCanvas,
+  shadowCanvas,
+  TEX_SCALE,
+} from './frogArt';
 import { sfx } from './sound';
 
 const INK = 0x1a1410;
@@ -62,8 +73,9 @@ export function createPondView(cb: PondCallbacks): PondViewHandles {
   const shadowLayer = new Container();
   const frogLayer = new Container();
   const fxLayer = new Container();
+  const fgLayer = new Container();
   const uiLayer = new Container();
-  world.addChild(bgLayer, shadowLayer, frogLayer, fxLayer, uiLayer);
+  world.addChild(bgLayer, shadowLayer, frogLayer, fxLayer, fgLayer, uiLayer);
 
   const textures = new Map<number, Texture>();
   let shadowTexture: Texture | null = null;
@@ -78,6 +90,8 @@ export function createPondView(cb: PondCallbacks): PondViewHandles {
   let preview: FrogView | null = null;
   let guide: Graphics | null = null;
   let dangerLine: Graphics | null = null;
+  let godray: GodrayFilter | null = null;
+  let surface: Graphics | null = null;
 
   const textureFor = (tier: number): Texture => {
     const cached = textures.get(tier);
@@ -89,77 +103,136 @@ export function createPondView(cb: PondCallbacks): PondViewHandles {
 
   // ------------------------------------------------------------- the pond
   function buildBackground(): void {
-    const water = new Graphics();
-    water.rect(0, 0, pond.width, pond.height).fill({ color: 0xdff2e6 });
-    const deep = new Graphics();
-    deep.rect(0, pond.height * 0.45, pond.width, pond.height * 0.55).fill({ color: 0xc7e6d6, alpha: 0.75 });
-    bgLayer.addChild(water, deep);
+    const rich = !motionOff();
 
-    // Reeds along both banks.
-    for (const side of [0, 1]) {
-      for (let i = 0; i < 9; i++) {
-        const reed = new Graphics();
-        const x = side === 0 ? 3 + i * 3.4 : pond.width - 3 - i * 3.4;
-        const top = pond.height * 0.42 + i * 26 + Math.random() * 20;
-        const bend = (side === 0 ? 1 : -1) * (8 + i * 2);
-        reed
-          .moveTo(x, pond.height)
-          .quadraticCurveTo(x + bend, (top + pond.height) / 2, x + bend * 0.6, top)
-          .stroke({ width: 2.4, color: 0x4f9c5f, alpha: 0.32, cap: 'round' });
-        bgLayer.addChild(reed);
+    const backdrop = new Sprite(Texture.from(pondBackdropCanvas(pond.width, pond.height)));
+    backdrop.width = pond.width;
+    backdrop.height = pond.height;
+    bgLayer.addChild(backdrop);
+
+    // Sun shafts: a real godray shader over the upper water.
+    if (rich) {
+      const rays = new Graphics();
+      rays.rect(0, 0, pond.width, pond.height).fill({ color: 0xffffff, alpha: 0.001 });
+      godray = new GodrayFilter({ alpha: 0.32, gain: 0.35, lacunarity: 2.4, angle: -32, parallel: true });
+      rays.filters = [godray];
+      bgLayer.addChild(rays);
+    }
+
+    // The surface: a moving water line the frogs fall through.
+    surface = new Graphics();
+    bgLayer.addChild(surface);
+
+    // Bokeh motes rising through the water.
+    const moteTexture = Texture.from(bokehCanvas());
+    const fireflyTexture = Texture.from(bokehCanvas('255, 226, 130'));
+    const motes = rich ? 22 : 8;
+    for (let i = 0; i < motes; i++) {
+      const mote = new Sprite(moteTexture);
+      mote.anchor.set(0.5);
+      const size = 6 + Math.random() * 16;
+      mote.width = size;
+      mote.height = size;
+      mote.alpha = 0.1 + Math.random() * 0.3;
+      mote.blendMode = 'add';
+      bgLayer.addChild(mote);
+      const drift = (): void => {
+        const x = 12 + Math.random() * (pond.width - 24);
+        mote.position.set(x, pond.height + 10);
+        gsap.to(mote, {
+          y: pond.lineY - 20 - Math.random() * 60,
+          x: x + (Math.random() - 0.5) * 60,
+          duration: 7 + Math.random() * 9,
+          delay: Math.random() * 6,
+          ease: 'none',
+          onComplete: drift,
+        });
+      };
+      drift();
+    }
+
+    // Fireflies over the water, blinking on their own schedule.
+    if (rich) {
+      for (let i = 0; i < 4; i++) {
+        const fly = new Sprite(fireflyTexture);
+        fly.anchor.set(0.5);
+        fly.width = 20;
+        fly.height = 20;
+        fly.alpha = 0;
+        fly.blendMode = 'add';
+        fgLayer.addChild(fly);
+        const wander = (): void => {
+          gsap.to(fly, {
+            x: 20 + Math.random() * (pond.width - 40),
+            y: pond.lineY * 0.4 + Math.random() * pond.height * 0.5,
+            duration: 3 + Math.random() * 4,
+            ease: 'sine.inOut',
+            onComplete: wander,
+          });
+        };
+        fly.position.set(Math.random() * pond.width, Math.random() * pond.height * 0.6);
+        wander();
+        gsap.to(fly, {
+          alpha: 0.85,
+          duration: 0.6 + Math.random(),
+          repeat: -1,
+          yoyo: true,
+          delay: Math.random() * 3,
+          ease: 'sine.inOut',
+        });
       }
     }
 
-    // Lily pads resting on the surface.
-    for (const [x, y, r] of [[54, 250, 26], [300, 300, 20], [180, 360, 30]] as const) {
-      const pad = new Graphics();
-      pad.circle(0, 0, r).fill({ color: 0x74c27a, alpha: 0.45 });
-      pad.moveTo(0, 0).lineTo(r * 0.9, r * 0.5).stroke({ width: 3, color: 0xdff2e6, alpha: 0.5 });
-      pad.position.set(x, y);
-      pad.scale.y = 0.42;
-      bgLayer.addChild(pad);
+    // Foreground lily pads, thrown out of focus.
+    for (const [x, y, r, rot] of [[-10, pond.height - 30, 80, 0.2], [pond.width + 8, pond.height - 64, 64, -0.5]] as const) {
+      const lily = new Sprite(Texture.from(lilyCanvas(r)));
+      lily.anchor.set(0.5);
+      lily.position.set(x, y);
+      lily.rotation = rot;
+      lily.alpha = 0.85;
+      lily.scale.y = 0.6;
+      fgLayer.addChild(lily);
     }
 
-    // Muddy bottom.
-    const mud = new Graphics();
-    mud.rect(0, pond.height - 26, pond.width, 26).fill({ color: 0x8a6a45 });
-    mud.moveTo(0, pond.height - 26).lineTo(pond.width, pond.height - 26).stroke({ width: 3, color: INK });
-    bgLayer.addChild(mud);
+    // Glass sheen and vignette on top of the whole scene.
+    const glass = new Sprite(Texture.from(glassCanvas(pond.width, pond.height)));
+    glass.width = pond.width;
+    glass.height = pond.height;
+    fgLayer.addChild(glass);
 
-    // Bubbles drifting up forever.
-    for (let i = 0; i < 12; i++) {
-      const bubble = new Graphics();
-      const size = 2 + Math.random() * 4;
-      bubble.circle(0, 0, size).fill({ color: 0xffffff, alpha: 0.5 });
-      bubble.position.set(20 + Math.random() * (pond.width - 40), pond.height);
-      bgLayer.addChild(bubble);
-      const float = (): void => {
-        gsap.fromTo(
-          bubble,
-          { y: pond.height - 20, alpha: 0.5 },
-          {
-            y: pond.lineY + Math.random() * 80,
-            alpha: 0,
-            duration: 4 + Math.random() * 5,
-            delay: Math.random() * 4,
-            ease: 'none',
-            onComplete: float,
-          },
-        );
-      };
-      float();
+    if (rich) {
+      fxLayer.filters = [new AdvancedBloomFilter({ threshold: 0.55, bloomScale: 1.1, brightness: 1, blur: 5 })];
+      const haze = new BlurFilter({ strength: 0.6 });
+      backdrop.filters = [haze];
     }
 
     dangerLine = new Graphics();
     for (let x = 0; x < pond.width; x += 18) {
       dangerLine.rect(x, pond.lineY - 1.5, 10, 3);
     }
-    dangerLine.fill({ color: 0xff2e2e, alpha: 0.85 });
+    dangerLine.fill({ color: 0xff4d4d });
     uiLayer.addChild(dangerLine);
 
     guide = new Graphics();
-    guide.rect(-1, 0, 2, pond.height).fill({ color: INK, alpha: 0.18 });
+    guide.rect(-1.5, 0, 3, pond.height).fill({ color: 0xffffff, alpha: 0.22 });
     uiLayer.addChild(guide);
+  }
+
+  /** The water line ripples all the time — a still surface looks like a picture. */
+  function drawSurface(): void {
+    if (!surface) return;
+    const y = pond.lineY + 6;
+    surface.clear();
+    surface.moveTo(0, y);
+    for (let x = 0; x <= pond.width; x += 10) {
+      surface.lineTo(x, y + Math.sin(x / 28 + clock * 1.6) * 2.4 + Math.sin(x / 11 - clock * 2.3) * 1.1);
+    }
+    surface.stroke({ width: 2, color: 0xffffff, alpha: 0.35 });
+    surface.moveTo(0, y + 5);
+    for (let x = 0; x <= pond.width; x += 10) {
+      surface.lineTo(x, y + 5 + Math.sin(x / 22 - clock * 1.1) * 2);
+    }
+    surface.stroke({ width: 1.2, color: 0xffffff, alpha: 0.18 });
   }
 
   // --------------------------------------------------------------- a frog
@@ -592,6 +665,8 @@ export function createPondView(cb: PondCallbacks): PondViewHandles {
         }
         cb.onCombo(pond.combo, pond.comboLeft);
 
+        drawSurface();
+        if (godray) godray.time += dt * 0.5;
         const danger = pond.frogs.some((body) => frogData(body).age > 0.7 && body.position.y - (body.circleRadius ?? 0) < pond.lineY);
         if (dangerLine) dangerLine.alpha = danger ? 0.5 + 0.5 * Math.sin(clock * 9) : 0.8;
         world.alpha = pond.over ? 0.55 : 1;
