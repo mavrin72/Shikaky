@@ -201,7 +201,42 @@ export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
   const pops = new Map<number, number>();
   const squash = new Map<number, number>();
   const impactSpeed = new Map<number, number>();
-  const faces = new Map<number, { nextBlink: number; blinkUntil: number; wink: boolean; mouth: number }>();
+  type Mood = 'idle' | 'scared' | 'happy' | 'hit' | 'dizzy' | 'worried';
+  interface Face {
+    nextBlink: number;
+    blinkUntil: number;
+    wink: boolean;
+    mouth: number;
+    mood: Mood;
+    moodUntil: number;
+    /** Where the pupils are pointing, in world space, smoothed. */
+    px: number;
+    py: number;
+  }
+  const faces = new Map<number, Face>();
+  const newFace = (): Face => ({
+    nextBlink: clock + 0.8 + Math.random() * 3,
+    blinkUntil: 0,
+    wink: false,
+    mouth: 0,
+    mood: 'idle',
+    moodUntil: 0,
+    px: 0,
+    py: 0,
+  });
+  const faceOf = (id: number): Face => {
+    let face = faces.get(id);
+    if (!face) {
+      face = newFace();
+      faces.set(id, face);
+    }
+    return face;
+  };
+  const setMood = (id: number, mood: Mood, seconds: number): void => {
+    const face = faceOf(id);
+    face.mood = mood;
+    face.moodUntil = clock + seconds;
+  };
   const skins = new Map<number, CanvasGradient>();
   let shakeAmount = 0;
   let flash = 0;
@@ -237,65 +272,199 @@ export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
     return grad;
   }
 
-  function drawFace(r: number, fill: string, id: number): void {
+  /** Eyes with real pupils that point somewhere, plus a mood on top. */
+  function drawFace(r: number, fill: string, face: Face, angle: number): void {
     if (!ctx) return;
-    let face = faces.get(id);
-    if (!face) {
-      face = { nextBlink: clock + 1 + Math.random() * 5, blinkUntil: 0, wink: false, mouth: 0 };
-      faces.set(id, face);
-    }
     const blinking = clock < face.blinkUntil;
-    const ink = luminance(fill) > 0.5 ? INK : '#FFF7E4';
+    const light = luminance(fill) > 0.5;
+    const ink = light ? INK : '#2A1F2E';
+    const sclera = '#FFFDF6';
     const eyeY = -r * 0.1;
     const eyeX = r * 0.32;
-    const eyeR = r * 0.155;
+    const eyeR = r * 0.2;
+    const tiny = r < 15;
+    const mood = face.mood;
 
-    // Cheeks first, so the eyes sit on top of them.
-    ctx.fillStyle = luminance(fill) > 0.5 ? 'rgba(255,90,120,0.28)' : 'rgba(255,140,160,0.26)';
+    // Pupils are aimed in world space, so they keep looking the right way even
+    // when the product itself has rolled.
+    const cos = Math.cos(-angle);
+    const sin = Math.sin(-angle);
+    const lookX = face.px * cos - face.py * sin;
+    const lookY = face.px * sin + face.py * cos;
+
+    ctx.fillStyle = light ? 'rgba(255,90,120,0.3)' : 'rgba(255,150,170,0.3)';
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.ellipse(side * r * 0.52, r * 0.2, r * 0.17, r * 0.11, 0, 0, TAU);
+      ctx.ellipse(side * r * 0.56, r * 0.21, r * 0.17, r * 0.11, 0, 0, TAU);
       ctx.fill();
     }
 
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     for (const side of [-1, 1]) {
-      const shut = blinking && (!face.wink || side < 0);
-      ctx.strokeStyle = ink;
-      ctx.fillStyle = ink;
-      ctx.lineWidth = Math.max(1.8, r * 0.09);
-      if (shut) {
-        ctx.beginPath();
-        ctx.arc(side * eyeX, eyeY + eyeR * 0.2, eyeR * 0.9, Math.PI * 1.15, Math.PI * 1.85);
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.ellipse(side * eyeX, eyeY, eyeR * 0.82, eyeR, 0, 0, TAU);
-        ctx.fill();
-        if (r > 22) {
-          ctx.fillStyle = ink === INK ? '#FFFDF6' : INK;
+      const cx = side * eyeX;
+      const shut = (blinking && (!face.wink || side < 0)) || mood === 'happy';
+
+      if (mood === 'dizzy') {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = Math.max(1.8, r * 0.09);
+        for (const d of [-1, 1]) {
           ctx.beginPath();
-          ctx.arc(side * eyeX + eyeR * 0.3, eyeY - eyeR * 0.34, eyeR * 0.32, 0, TAU);
-          ctx.fill();
+          ctx.moveTo(cx - eyeR * 0.6 * d, eyeY - eyeR * 0.6);
+          ctx.lineTo(cx + eyeR * 0.6 * d, eyeY + eyeR * 0.6);
+          ctx.stroke();
         }
+        continue;
+      }
+
+      if (shut) {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = Math.max(1.8, r * 0.095);
+        ctx.beginPath();
+        ctx.arc(cx, eyeY + eyeR * 0.35, eyeR * 0.85, Math.PI * 1.12, Math.PI * 1.88);
+        ctx.stroke();
+        continue;
+      }
+
+      if (mood === 'hit') {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = Math.max(1.8, r * 0.095);
+        ctx.beginPath();
+        ctx.arc(cx, eyeY - eyeR * 0.3, eyeR * 0.85, Math.PI * 0.18, Math.PI * 0.82);
+        ctx.stroke();
+        continue;
+      }
+
+      const wide = mood === 'scared' ? 1.22 : 1;
+      if (tiny) {
+        ctx.fillStyle = light ? ink : sclera;
+        ctx.beginPath();
+        ctx.ellipse(cx + lookX * eyeR * 0.3, eyeY + lookY * eyeR * 0.3, eyeR * 0.6, eyeR * 0.68, 0, 0, TAU);
+        ctx.fill();
+        continue;
+      }
+
+      ctx.fillStyle = sclera;
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = Math.max(1.4, r * 0.045);
+      ctx.beginPath();
+      ctx.ellipse(cx, eyeY, eyeR * 0.82 * wide, eyeR * wide, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      const pupilR = eyeR * (mood === 'scared' ? 0.36 : 0.52);
+      const reach = eyeR * 0.36;
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.arc(cx + lookX * reach, eyeY + lookY * reach, pupilR, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = sclera;
+      ctx.beginPath();
+      ctx.arc(cx + lookX * reach + pupilR * 0.35, eyeY + lookY * reach - pupilR * 0.4, pupilR * 0.34, 0, TAU);
+      ctx.fill();
+
+      if (mood === 'scared' || mood === 'worried') {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = Math.max(1.6, r * 0.07);
+        ctx.beginPath();
+        const brow = mood === 'scared' ? -eyeR * 1.5 : -eyeR * 1.35;
+        ctx.moveTo(cx - eyeR * 0.7, eyeY + brow + (mood === 'worried' ? eyeR * 0.3 * side : 0));
+        ctx.lineTo(cx + eyeR * 0.7, eyeY + brow - (mood === 'worried' ? eyeR * 0.3 * side : 0));
+        ctx.stroke();
       }
     }
 
+    // Mouth
     ctx.strokeStyle = ink;
     ctx.fillStyle = ink;
     ctx.lineWidth = Math.max(1.8, r * 0.085);
-    const mouthY = r * 0.32;
-    if (face.mouth > 0.06) {
+    const mouthY = r * 0.34;
+    if (mood === 'happy') {
       ctx.beginPath();
-      ctx.ellipse(0, mouthY, r * (0.13 + 0.09 * face.mouth), r * (0.09 + 0.2 * face.mouth), 0, 0, TAU);
+      ctx.arc(0, mouthY - r * 0.14, r * 0.26, 0.1 * Math.PI, 0.9 * Math.PI);
       ctx.fill();
+    } else if (mood === 'scared' || face.mouth > 0.06) {
+      const open = Math.max(face.mouth, mood === 'scared' ? 0.45 : 0);
+      ctx.beginPath();
+      ctx.ellipse(0, mouthY, r * (0.11 + 0.08 * open), r * (0.08 + 0.2 * open), 0, 0, TAU);
+      ctx.fill();
+    } else if (mood === 'worried') {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.2, mouthY);
+      ctx.quadraticCurveTo(-r * 0.07, mouthY - r * 0.1, 0, mouthY);
+      ctx.quadraticCurveTo(r * 0.07, mouthY + r * 0.1, r * 0.2, mouthY);
+      ctx.stroke();
     } else {
       ctx.beginPath();
       ctx.arc(0, mouthY - r * 0.13, r * 0.22, 0.22 * Math.PI, 0.78 * Math.PI);
       ctx.stroke();
     }
+
+    if (mood === 'worried' && !tiny) {
+      ctx.fillStyle = '#7FD8FF';
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = Math.max(1.2, r * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(r * 0.62, -r * 0.34);
+      ctx.quadraticCurveTo(r * 0.75, -r * 0.1, r * 0.62, -r * 0.02);
+      ctx.quadraticCurveTo(r * 0.5, -r * 0.1, r * 0.62, -r * 0.34);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
+  /** Everyone watches whatever is falling — that is what makes the pile feel alive. */
+  function updateFaces(dt: number): void {
+    let faller: Body | null = null;
+    for (const body of game.bodies) {
+      if (body.vy > 240 && (!faller || body.vy > faller.vy)) faller = body;
+    }
+    const pendingR = game.radiusOf(game.next);
+    const aim = { x: clamp(aimX, pendingR, game.width - pendingR), y: game.lineY - pendingR };
+
+    for (const body of game.bodies) {
+      const face = faceOf(body.id);
+
+      if (clock > face.nextBlink) {
+        face.blinkUntil = clock + 0.14;
+        face.wink = Math.random() < 0.3;
+        face.nextBlink = clock + 1.4 + Math.random() * 3.4;
+      }
+      face.mouth = Math.max(0, face.mouth - dt * 2.2);
+      if (face.mood !== 'idle' && clock > face.moodUntil) face.mood = 'idle';
+
+      const watching = faller && faller !== body && faller.y < body.y ? faller : null;
+      const target = watching ?? (game.canDrop && !game.over ? aim : null);
+
+      let tx = 0;
+      let ty = 0;
+      if (target) {
+        const dx = target.x - body.x;
+        const dy = target.y - body.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        tx = dx / dist;
+        ty = dy / dist;
+      } else {
+        // Nothing to watch: eyes drift instead of freezing.
+        tx = Math.sin(clock * 0.7 + body.id) * 0.5;
+        ty = Math.sin(clock * 0.45 + body.id * 2) * 0.3;
+      }
+      face.px += (tx - face.px) * Math.min(1, dt * 9);
+      face.py += (ty - face.py) * Math.min(1, dt * 9);
+
+      if (face.mood === 'idle' || face.mood === 'worried' || face.mood === 'scared') {
+        const incoming =
+          watching &&
+          Math.abs(watching.x - body.x) < (watching.r + body.r) * 1.15 &&
+          body.y - watching.y < body.r * 6;
+        if (incoming) setMood(body.id, 'scared', 0.25);
+        else if (body.age > 0.7 && body.y - body.r < game.lineY + body.r * 0.8) {
+          setMood(body.id, 'worried', 0.3);
+        } else if (face.mood !== 'idle' && clock > face.moodUntil) face.mood = 'idle';
+      }
+    }
+  }
   function drawBody(body: Body, preview = false): void {
     if (!ctx) return;
     const item = CHAIN[body.tier];
@@ -334,7 +503,7 @@ export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
     ctx.save();
     ctx.rotate(body.angle);
     DETAILS[body.tier]?.(ctx, body.r, tone);
-    drawFace(body.r, item.fill, body.id);
+    drawFace(body.r, item.fill, faceOf(body.id), body.angle);
     ctx.restore();
 
     // Gloss stays put: the light does not roll with the fruit.
@@ -584,12 +753,15 @@ export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
         sfx.erase();
         buzz([14, 30, 14]);
         shakeAmount = 18;
+        for (const body of game.bodies) setMood(body.id, 'dizzy', 1.1 + Math.random() * 0.5);
         cb.onShakes(game.shakesLeft);
       } else if (event.type === 'merge') {
         sfx.merge(event.tier);
         buzz(event.tier > 6 ? 18 : 8);
         pops.set(event.id, 1);
-        faces.set(event.id, { nextBlink: clock + 1.5 + Math.random() * 4, blinkUntil: 0, wink: false, mouth: 1 });
+        faces.set(event.id, newFace());
+        faceOf(event.id).mouth = 1;
+        setMood(event.id, 'happy', 0.9);
         if (!motionOff()) {
           bursts.push({ x: event.x, y: event.y, r: game.radiusOf(event.tier), color: CHAIN[event.tier].fill, t: 0 });
           shakeAmount = Math.min(16, shakeAmount + 2 + event.tier);
@@ -655,22 +827,16 @@ export function createBasketView(cb: BasketCallbacks): BasketViewHandles {
       if (left <= 0) squash.delete(id);
       else squash.set(id, left);
     }
-    for (const face of faces.values()) {
-      if (clock > face.nextBlink) {
-        face.blinkUntil = clock + 0.13;
-        face.wink = Math.random() < 0.35;
-        face.nextBlink = clock + 2 + Math.random() * 5;
-      }
-      face.mouth = Math.max(0, face.mouth - dt * 2.2);
-    }
+    updateFaces(dt);
     if (faces.size > 200) faces.clear();
 
     // A body that just lost a lot of downward speed has hit something.
     for (const body of game.bodies) {
       const before = impactSpeed.get(body.id) ?? 0;
       if (before > 260 && body.vy < before * 0.45) {
-        const face = faces.get(body.id);
-        if (face) face.mouth = Math.max(face.mouth, Math.min(0.7, before / 900));
+        const face = faceOf(body.id);
+        face.mouth = Math.max(face.mouth, Math.min(0.7, before / 900));
+        if (before > 520) setMood(body.id, 'hit', 0.3);
         if (!motionOff()) {
           squash.set(body.id, Math.min(1, before / 1100));
           for (let i = 0; i < 4; i++) {
