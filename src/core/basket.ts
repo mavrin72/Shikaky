@@ -48,23 +48,30 @@ export interface Body {
   age: number;
   /** Just born from a merge: it has to settle before it can merge again. */
   fresh?: boolean;
+  /** Something is holding this body up right now, so it rolls instead of spinning. */
+  supported?: boolean;
 }
 
 export type BasketEvent =
-  | { type: 'merge'; tier: number; x: number; y: number }
+  | { type: 'merge'; tier: number; x: number; y: number; id: number }
   | { type: 'drop' }
   | { type: 'final'; x: number; y: number }
   | { type: 'over' };
 
-const GRAVITY = 2100;
-/** Without damping the pile never stops shivering — and a shivering pile
- *  merges by itself, which quietly removes the whole challenge. */
-const DAMPING = 0.995;
-const SLEEP_SPEED = 6;
-const RESTITUTION = 0.18;
-/** Coulomb-ish contact friction. Without it a pile slides itself into perfect
- *  packing and the basket can never overflow. */
-const FRICTION = 0.42;
+const GRAVITY = 2400;
+const DAMPING = 0.999;
+const SLEEP_SPEED = 5;
+/** Matching the genre: barely any bounce and almost no contact friction
+ *  (the reference clone runs restitution 0.1 / friction 0.006). */
+const RESTITUTION = 0.1;
+const FRICTION = 0.16;
+/** Spin is not accumulated from hits — a supported body rolls, which means its
+ *  spin converges on -vx / r. That is why piles here come to a full stop. */
+const ROLL_BLEND = 0.22;
+const SPIN_DAMP = 0.97;
+/** Below this closing speed a contact does not bounce at all — otherwise the
+ *  pile micro-hops forever on the energy gravity keeps adding. */
+const BOUNCE_THRESHOLD = 70;
 const SUBSTEPS = 4;
 const DROP_COOLDOWN = 0.32;
 /** How long a body may sit above the line before the run ends. */
@@ -166,10 +173,13 @@ export class Basket {
     const { bodies, width, height } = this;
 
     for (const body of bodies) {
+      body.supported = false;
       body.vy += GRAVITY * h;
       body.vx *= DAMPING;
       body.vy *= DAMPING;
-      body.spin *= 0.985;
+      // Air drag on rotation: nothing spins forever, wedged or not.
+      body.spin *= 0.994;
+      if (Math.abs(body.spin) < 0.02 && Math.abs(body.vx) < SLEEP_SPEED) body.spin = 0;
       if (Math.abs(body.vx) < SLEEP_SPEED) body.vx = 0;
       body.x += body.vx * h;
       body.y += body.vy * h;
@@ -186,9 +196,9 @@ export class Basket {
       }
       if (body.y + body.r > height) {
         body.y = height - body.r;
-        body.vy = -Math.abs(body.vy) * RESTITUTION;
-        body.vx *= 0.86;
-        body.spin = body.spin * 0.86 - body.vx * 0.004;
+        body.vy = Math.abs(body.vy) < BOUNCE_THRESHOLD ? 0 : -Math.abs(body.vy) * RESTITUTION;
+        body.vx *= 0.98;
+        body.supported = true;
       }
     }
 
@@ -232,7 +242,8 @@ export class Basket {
         const rvy = b.vy - a.vy;
         const along = rvx * nx + rvy * ny;
         if (along < 0) {
-          const impulse = (-(1 + RESTITUTION) * along) / 2;
+          const bounce = -along < BOUNCE_THRESHOLD ? 0 : RESTITUTION;
+          const impulse = (-(1 + bounce) * along) / 2;
           a.vx -= impulse * nx;
           a.vy -= impulse * ny;
           b.vx += impulse * nx;
@@ -247,18 +258,43 @@ export class Basket {
           a.vy += friction * ty;
           b.vx -= friction * tx;
           b.vy -= friction * ty;
-          a.spin += tangentSpeed * 0.012;
-          b.spin -= tangentSpeed * 0.012;
         }
+
+        // Whichever body sits lower is holding the other one up.
+        if (ny > 0.5) a.supported = true;
+        else if (ny < -0.5) b.supported = true;
 
         // A ball balanced exactly on another is unstable in the real world, and
         // our solver is too tidy to notice. Nudge it off the peak.
-        if (Math.abs(nx) < 0.3 && Math.abs(along) < 25) {
+        // Only a genuinely unstable contact gets nudged. A settled pile has
+        // hairline overlaps, and poking those keeps it shivering forever.
+        if (Math.abs(nx) < 0.3 && Math.abs(along) < 25 && overlap > Math.min(a.r, b.r) * 0.12) {
           const dir = Math.abs(dx) < 0.4 ? (this.rng() < 0.5 ? -1 : 1) : Math.sign(dx);
-          const push = Math.min(overlap, 2) * 1.1;
+          const push = Math.min(overlap, 2) * 0.9;
           a.vx -= dir * push;
           b.vx += dir * push;
         }
+      }
+    }
+
+    // Rolling, not spinning: a body resting on something turns only as fast as
+    // it travels, and stops turning the moment it stops moving.
+    for (const body of bodies) {
+      if (!body.supported) continue;
+      // Rolling resistance: a slow roller on a slope has to come to a stop,
+      // otherwise the pile always has something creeping around in it.
+      body.vx *= 0.985;
+      const rolling = -body.vx / body.r;
+      body.spin += (rolling - body.spin) * ROLL_BLEND;
+      body.spin *= SPIN_DAMP;
+      // Resting contact: stop feeding it the gravity it cannot act on.
+      if (Math.abs(body.vx) < SLEEP_SPEED * 2 && Math.abs(body.vy) < BOUNCE_THRESHOLD * 0.6) {
+        body.vx = 0;
+        body.vy = 0;
+        body.spin = 0;
+        // Settled goods turn their face back up — they are characters, not rocks.
+        const upright = Math.round(body.angle / (Math.PI * 2)) * Math.PI * 2;
+        body.angle += (upright - body.angle) * 0.04;
       }
     }
 
@@ -269,10 +305,11 @@ export class Basket {
     const tier = a.tier + 1;
     const x = (a.x + b.x) / 2;
     const y = (a.y + b.y) / 2;
+    const id = this.nextId++;
     this.score += CHAIN[tier].price;
     this.merges++;
     this.bodies.push({
-      id: this.nextId++,
+      id,
       tier,
       x,
       y,
@@ -285,7 +322,7 @@ export class Basket {
       age: 0,
       fresh: true,
     });
-    this.events.push({ type: 'merge', tier, x, y });
+    this.events.push({ type: 'merge', tier, x, y, id });
     if (tier === FINAL_TIER) this.events.push({ type: 'final', x, y });
   }
 

@@ -125,3 +125,27 @@ describe('basket fairness', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(12);
   });
 });
+
+describe('basket physics settles', () => {
+  it('comes to a stop instead of shivering and spinning forever', () => {
+    const game = new Basket(31);
+    for (let i = 0; i < 26; i++) {
+      game.drop(40 + ((i * 37) % 280));
+      run(game, 0.4);
+    }
+    run(game, 3);
+    const moving = game.bodies.filter((body) => Math.hypot(body.vx, body.vy) > 1).length;
+    const spinning = game.bodies.filter((body) => Math.abs(body.spin) > 0.05).length;
+    expect(moving).toBeLessThanOrEqual(Math.ceil(game.bodies.length * 0.25));
+    expect(spinning).toBeLessThanOrEqual(Math.ceil(game.bodies.length * 0.25));
+  });
+
+  it('rolls rather than spins: a resting body has no spin left', () => {
+    const game = new Basket(32);
+    game.drop(180);
+    run(game, 4);
+    const [body] = game.bodies;
+    expect(Math.abs(body.spin)).toBeLessThan(0.05);
+    expect(Math.abs(body.vx)).toBeLessThan(2);
+  });
+});

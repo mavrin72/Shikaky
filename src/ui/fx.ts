@@ -1,8 +1,10 @@
 import { settings } from '../core/storage';
 import { h } from './dom';
 
-const reduced = (): boolean =>
+export const motionOff = (): boolean =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches || !settings().fx;
+
+const reduced = motionOff;
 
 const CONFETTI = ['#FF4D8D', '#2D5BFF', '#00D18F', '#FF7A2F', '#9B5DE5', '#FFE14A'];
 
