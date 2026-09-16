@@ -3,7 +3,7 @@ import './styles/board.css';
 import './styles/screens.css';
 
 import { TOTAL_LEVELS } from './core/levels';
-import { basketScreen, levelsScreen, menuScreen, playScreen } from './ui/screens';
+import { basketScreen, levelsScreen, menuScreen, playScreen, setRerender } from './ui/screens';
 import { applyTheme } from './ui/modals';
 import { armAudio } from './ui/sound';
 
@@ -26,6 +26,7 @@ function route(): void {
 }
 
 window.addEventListener('hashchange', route);
+setRerender(route);
 route();
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

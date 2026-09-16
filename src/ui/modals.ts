@@ -70,7 +70,7 @@ function toggleRow(label: string, value: boolean, onChange: (next: boolean) => v
   );
 }
 
-export function openSettings(onReset: () => void): void {
+export function openSettings(onReset: () => void, onProgress: () => void): void {
   openSheet((close) =>
     h(
       'div',
@@ -104,6 +104,22 @@ export function openSettings(onReset: () => void): void {
         ),
       ),
       h('p', {}, 'Прогрес зберігається лише у цьому браузері.'),
+      h(
+        'div',
+        { class: 'sheet__row' },
+        h(
+          'button',
+          {
+            class: 'btn btn--blue',
+            type: 'button',
+            onclick: () => {
+              close();
+              onProgress();
+            },
+          },
+          'Перенести або відновити прогрес',
+        ),
+      ),
       h(
         'div',
         { class: 'sheet__row' },

@@ -170,6 +170,32 @@
 .sheet__row { display: flex; gap: 10px; }
 .sheet__row .btn { flex: 1; }
 
+/* progress sheet ------------------------------------------------------- */
+.sheet--tall { gap: 18px; }
+.prog__block { display: flex; flex-direction: column; gap: 10px; }
+.prog__block h3 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.prog__block + .prog__block { border-top: 2px dashed var(--frame); padding-top: 16px; }
+.prog__status { font-size: 12px; }
+
+.field {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  border: var(--bw) solid var(--frame);
+  border-radius: var(--r);
+  font: inherit;
+  font-weight: 600;
+}
+.field:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.field--code { font-family: var(--f-mono); font-size: 11px; resize: vertical; word-break: break-all; }
+
 .result { display: flex; gap: 10px; }
 .result div {
   flex: 1;

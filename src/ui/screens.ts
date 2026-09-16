@@ -19,6 +19,8 @@ import {
   recordWin,
   resetProgress,
   solvedCount,
+  NO_TIME,
+  type LevelRecord,
 } from '../core/storage';
 import { CHAIN } from '../core/pond';
 import { basketBest, basketTop, recordBasket } from '../core/storage';
@@ -27,6 +29,7 @@ import { BoardView } from './board';
 import { h } from './dom';
 import { confetti, toast } from './fx';
 import { openRules, openSettings, openSheet } from './modals';
+import { openProgress } from './progress';
 import { sfx } from './sound';
 
 const ON_TIER: Record<string, string> = {
@@ -39,8 +42,26 @@ const ON_TIER: Record<string, string> = {
   '--red': '#FFF0EE',
 };
 
+/** Restored progress carries no time, so a record can be "solved, but unraced". */
+const bestLabel = (record: LevelRecord): string => (record.time > NO_TIME ? formatTime(record.time) : '—');
+
 const go = (hash: string): void => {
   window.location.hash = hash;
+};
+
+/** Screens that show counts redraw themselves when progress arrives from an
+ *  a restore or an imported code; main.ts hands us its router to do that. */
+let rerender: () => void = () => {};
+
+export const setRerender = (route: () => void): void => {
+  rerender = route;
+};
+
+/** A puzzle in progress is never thrown away to refresh a counter behind it. */
+let playing = false;
+
+const refreshScreens = (): void => {
+  if (!playing) rerender();
 };
 
 let cleanup: (() => void) | null = null;
@@ -86,13 +107,26 @@ function topbar(title: string, subtitle?: string, back?: string, rules: () => vo
       {
         class: 'btn btn--icon',
         type: 'button',
+        'aria-label': 'Прогрес',
+        onclick: () => openProgress(refreshScreens),
+      },
+      '💾',
+    ),
+    h(
+      'button',
+      {
+        class: 'btn btn--icon',
+        type: 'button',
         'aria-label': 'Налаштування',
         onclick: () =>
-          openSettings(() => {
-            resetProgress();
-            toast('Прогрес стерто');
-            go('#/');
-          }),
+          openSettings(
+            () => {
+              resetProgress();
+              toast('Прогрес стерто');
+              go('#/');
+            },
+            () => openProgress(refreshScreens),
+          ),
       },
       '⚙',
     ),
@@ -101,6 +135,7 @@ function topbar(title: string, subtitle?: string, back?: string, rules: () => vo
 
 // ------------------------------------------------------------------ menu
 export function menuScreen(): void {
+  playing = false;
   const done = solvedCount();
   const next = nextLevel();
   const { tier } = levelRef(next);
@@ -133,6 +168,11 @@ export function menuScreen(): void {
           basketBest() ? `Жабки · ${basketBest()} мух` : 'Жабки',
         ),
         h('button', { class: 'btn btn--big', type: 'button', onclick: () => openRules() }, 'Як грати'),
+        h(
+          'button',
+          { class: 'btn btn--big', type: 'button', onclick: () => openProgress(() => menuScreen()) },
+          'Відновити прогрес',
+        ),
       ),
       h(
         'div',
@@ -173,11 +213,11 @@ function tierBlock(tier: Tier): HTMLElement {
           class: classes.join(' '),
           type: 'button',
           disabled: !unlocked,
-          'aria-label': `Рівень ${level}${record ? `, пройдено за ${formatTime(record.time)}` : ''}`,
+          'aria-label': `Рівень ${level}${record ? `, пройдено${record.time > NO_TIME ? ` за ${formatTime(record.time)}` : ''}` : ''}`,
           onclick: () => unlocked && go(`#/play/${level}`),
         },
         h('span', {}, String(level)),
-        record ? h('small', {}, formatTime(record.time)) : !unlocked ? h('small', {}, '🔒') : null,
+        record ? h('small', {}, bestLabel(record)) : !unlocked ? h('small', {}, '🔒') : null,
       ),
     );
   }
@@ -200,6 +240,7 @@ function tierBlock(tier: Tier): HTMLElement {
 }
 
 export function levelsScreen(): void {
+  playing = false;
   mount(
     h(
       'div',
@@ -212,6 +253,7 @@ export function levelsScreen(): void {
 
 // ------------------------------------------------------------------ play
 export function playScreen(target: number | 'daily'): void {
+  playing = true;
   const isDaily = target === 'daily';
   const level = isDaily ? 0 : (target as number);
   const puzzle = isDaily ? dailyPuzzle() : puzzleForLevel(level);
@@ -271,8 +313,11 @@ export function playScreen(target: number | 'daily'): void {
     } else {
       const previous = recordOf(level);
       const { best } = recordWin(level, elapsed, game.hintsUsed);
-      if (best && previous) headline = 'Новий рекорд!';
-      sub = previous ? `Було: ${formatTime(previous.time)}` : `Блок «${ref?.tier.name}», рівень ${ref?.nth} з ${ref?.tier.count}`;
+      if (best && previous && previous.time > NO_TIME) headline = 'Новий рекорд!';
+      sub =
+        previous && previous.time > NO_TIME
+          ? `Було: ${formatTime(previous.time)}`
+          : `Блок «${ref?.tier.name}», рівень ${ref?.nth} з ${ref?.tier.count}`;
     }
 
     const following = isDaily ? null : Math.min(level + 1, TOTAL_LEVELS);
@@ -414,6 +459,7 @@ function basketRules(): void {
 }
 
 export function basketScreen(): void {
+  playing = false;
   const scoreEl = h('div', { class: 'hud__level' }, '0 мух', h('span', { class: 'hud__tier' }, 'ставок'));
   const bestEl = h('div', { class: 'hud__timer' }, `рекорд ${basketBest()}`);
   const comboEl = h('div', { class: 'combo' }, h('b', {}, '×2'), h('i', {}));
