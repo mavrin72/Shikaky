@@ -22,11 +22,7 @@ export interface Save {
   settings: Settings;
 }
 
-/** The save of a player who has not signed in. Signed-in players get `KEY:<id>`,
- *  so switching accounts on a shared device never overwrites anybody. */
 const KEY = 'shikaky.v1';
-/** Which account this browser was last playing as. */
-const ACCOUNT_KEY = 'shikaky.account';
 
 /** A level restored from a code or by hand has no honest time; 0 means "solved,
  *  time unknown" and always loses to a real record when two saves merge. */
@@ -49,28 +45,15 @@ const readRaw = (key: string): string | null => {
   }
 };
 
-const writeRaw = (key: string, value: string | null): void => {
+const writeRaw = (key: string, value: string): void => {
   try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
+    localStorage.setItem(key, value);
   } catch {
     /* private mode or a full quota — the game still plays, it just forgets. */
   }
 };
 
-let accountId: string | null = readRaw(ACCOUNT_KEY);
-
-const activeKey = (): string => (accountId ? `${KEY}:${accountId}` : KEY);
-
-let state: Save = loadFrom(activeKey());
-
-const listeners = new Set<(save: Save) => void>();
-
-/** Cloud sync and the UI both need to know when the save moved. */
-export function onSaveChange(listener: (save: Save) => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+let state: Save = loadFrom(KEY);
 
 /** Stable key for a level: its tier and its number inside that tier. */
 const keyFor = (level: number): string => {
@@ -129,8 +112,7 @@ function loadFrom(key: string): Save {
 }
 
 function persist(): void {
-  writeRaw(activeKey(), JSON.stringify(state));
-  for (const listener of listeners) listener(state);
+  writeRaw(KEY, JSON.stringify(state));
 }
 
 /** Of two records for the same level, the faster honest one wins. */
@@ -258,19 +240,6 @@ export function resetProgress(): void {
   const keep = state.settings;
   state = { ...fresh(), settings: keep };
   persist();
-}
-
-// ------------------------------------------------------------------ profiles
-export const activeAccount = (): string | null => accountId;
-
-/** Switches which save this browser is playing. Passing null goes back to the
- *  guest save — the one every player had before accounts existed. */
-export function useAccount(id: string | null): Save {
-  accountId = id;
-  writeRaw(ACCOUNT_KEY, id);
-  state = loadFrom(activeKey());
-  for (const listener of listeners) listener(state);
-  return state;
 }
 
 // ------------------------------------------------------- transfer codes

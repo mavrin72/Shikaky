@@ -1,4 +1,3 @@
-import { accountState } from '../core/account';
 import { settings, updateSettings, type Settings } from '../core/storage';
 import { h } from './dom';
 import { sfx } from './sound';
@@ -71,7 +70,7 @@ function toggleRow(label: string, value: boolean, onChange: (next: boolean) => v
   );
 }
 
-export function openSettings(onReset: () => void, onAccount: () => void): void {
+export function openSettings(onReset: () => void, onProgress: () => void): void {
   openSheet((close) =>
     h(
       'div',
@@ -104,13 +103,7 @@ export function openSettings(onReset: () => void, onAccount: () => void): void {
           },
         ),
       ),
-      h(
-        'p',
-        {},
-        accountState().email
-          ? `Прогрес зберігається під ${accountState().email}.`
-          : 'Прогрес зберігається лише у цьому браузері. Увійди через Google, щоб прив’язати його до емейлу.',
-      ),
+      h('p', {}, 'Прогрес зберігається лише у цьому браузері.'),
       h(
         'div',
         { class: 'sheet__row' },
@@ -121,10 +114,10 @@ export function openSettings(onReset: () => void, onAccount: () => void): void {
             type: 'button',
             onclick: () => {
               close();
-              onAccount();
+              onProgress();
             },
           },
-          'Прогрес і акаунт',
+          'Перенести або відновити прогрес',
         ),
       ),
       h(

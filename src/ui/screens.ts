@@ -29,8 +29,7 @@ import { BoardView } from './board';
 import { h } from './dom';
 import { confetti, toast } from './fx';
 import { openRules, openSettings, openSheet } from './modals';
-import { accountBadge, openAccount } from './account';
-import { accountState } from '../core/account';
+import { openProgress } from './progress';
 import { sfx } from './sound';
 
 const ON_TIER: Record<string, string> = {
@@ -51,7 +50,7 @@ const go = (hash: string): void => {
 };
 
 /** Screens that show counts redraw themselves when progress arrives from an
- *  account or a restore; main.ts hands us its router to do that. */
+ *  a restore or an imported code; main.ts hands us its router to do that. */
 let rerender: () => void = () => {};
 
 export const setRerender = (route: () => void): void => {
@@ -108,10 +107,10 @@ function topbar(title: string, subtitle?: string, back?: string, rules: () => vo
       {
         class: 'btn btn--icon',
         type: 'button',
-        'aria-label': 'Прогрес і акаунт',
-        onclick: () => openAccount(refreshScreens),
+        'aria-label': 'Прогрес',
+        onclick: () => openProgress(refreshScreens),
       },
-      accountBadge(),
+      '💾',
     ),
     h(
       'button',
@@ -126,7 +125,7 @@ function topbar(title: string, subtitle?: string, back?: string, rules: () => vo
               toast('Прогрес стерто');
               go('#/');
             },
-            () => openAccount(refreshScreens),
+            () => openProgress(refreshScreens),
           ),
       },
       '⚙',
@@ -171,8 +170,8 @@ export function menuScreen(): void {
         h('button', { class: 'btn btn--big', type: 'button', onclick: () => openRules() }, 'Як грати'),
         h(
           'button',
-          { class: 'btn btn--big', type: 'button', onclick: () => openAccount(() => menuScreen()) },
-          accountState().email ? 'Мій прогрес' : 'Зберегти прогрес',
+          { class: 'btn btn--big', type: 'button', onclick: () => openProgress(() => menuScreen()) },
+          'Відновити прогрес',
         ),
       ),
       h(

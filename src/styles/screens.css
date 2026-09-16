@@ -170,21 +170,18 @@
 .sheet__row { display: flex; gap: 10px; }
 .sheet__row .btn { flex: 1; }
 
-/* account sheet -------------------------------------------------------- */
+/* progress sheet ------------------------------------------------------- */
 .sheet--tall { gap: 18px; }
-.acct__block { display: flex; flex-direction: column; gap: 10px; }
-.acct__block h3 {
+.prog__block { display: flex; flex-direction: column; gap: 10px; }
+.prog__block h3 {
   margin: 0;
   font-family: var(--f-display);
   font-size: 15px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.acct__block + .acct__block { border-top: 2px dashed var(--frame); padding-top: 16px; }
-.acct__who { display: flex; align-items: center; gap: 12px; }
-.acct__pic { width: 42px; height: 42px; border-radius: 999px; border: 2px solid var(--frame); }
-.acct__mail { font-family: var(--f-mono); font-size: 14px; word-break: break-all; }
-.acct__status { font-size: 12px; }
+.prog__block + .prog__block { border-top: 2px dashed var(--frame); padding-top: 16px; }
+.prog__status { font-size: 12px; }
 
 .field {
   width: 100%;
