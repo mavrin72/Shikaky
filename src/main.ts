@@ -3,9 +3,10 @@ import './styles/board.css';
 import './styles/screens.css';
 
 import { TOTAL_LEVELS } from './core/levels';
-import { basketScreen, levelsScreen, menuScreen, playScreen } from './ui/screens';
+import { basketScreen, levelsScreen, menuScreen, playScreen, setRerender } from './ui/screens';
 import { applyTheme } from './ui/modals';
 import { armAudio } from './ui/sound';
+import { initAccount } from './ui/account';
 
 applyTheme();
 armAudio();
@@ -26,7 +27,12 @@ function route(): void {
 }
 
 window.addEventListener('hashchange', route);
+setRerender(route);
 route();
+
+// Picks the signed-in email back up and pulls whatever it has stored, without
+// holding up the first paint.
+void initAccount();
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
